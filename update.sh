@@ -114,7 +114,7 @@ download_github_asset() {
   # GitHub API returns 302 to S3 — capture redirect, then download without auth.
   local asset_api_url=$1
   local output=$2
-  local redirect_url http_code
+  local redirect_url="" http_code
   local -a auth_args=(-sS -w "%{redirect_url}" -o /dev/null)
 
   if [[ -n "$GITHUB_TOKEN" ]]; then
