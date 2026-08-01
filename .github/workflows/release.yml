@@ -38,7 +38,7 @@ jobs:
 
       - name: Cache libata build
         id: libata-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: lib/ata-validator-crystal/libata
           key: libata-${{ steps.ata-src.outputs.sha }}
