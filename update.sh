@@ -8,7 +8,7 @@ set -euo pipefail
 #  back automatically if the new release fails its health check.
 # ─────────────────────────────────────────────
 
-REPO="GroophyLifefor/yozgat-crystal"
+REPO="GroophyLifefor/yozgat-mrt"
 ARCHIVE_NAME="yozgat-x86_64-linux-gnu.tar.gz"
 INSTALL_BIN="/usr/local/bin/yozgat"
 INSTALL_BIN_OLD="/usr/local/bin/yozgat.old"

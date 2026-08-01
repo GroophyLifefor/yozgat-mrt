@@ -3,10 +3,10 @@ set -euo pipefail
 
 # ─────────────────────────────────────────────
 #  Yozgat (Crystal) Installer
-#  Usage: curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-crystal/main/install.sh | sudo bash
+#  Usage: curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/install.sh | sudo bash
 # ─────────────────────────────────────────────
 
-REPO="GroophyLifefor/yozgat-crystal"
+REPO="GroophyLifefor/yozgat-mrt"
 ARCHIVE_NAME="yozgat-x86_64-linux-gnu.tar.gz"
 INSTALL_BIN="/usr/local/bin/yozgat"
 INSTALL_LIB="/usr/local/lib/yozgat"
@@ -244,7 +244,7 @@ info "Installing systemd service..."
 cat > "$SERVICE_FILE" <<'EOF'
 [Unit]
 Description=Yozgat Service (Crystal)
-Documentation=https://github.com/GroophyLifefor/yozgat-crystal
+Documentation=https://github.com/GroophyLifefor/yozgat-mrt
 After=network.target
 
 [Service]

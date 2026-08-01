@@ -37,7 +37,12 @@ jobs:
         working-directory: lib/ata-validator-crystal
         env:
           ATA_VALIDATOR_SRC: /tmp/ata-validator
-        run: crystal run scripts/build_native.cr
+        run: |
+          # ata-validator's CMake only honors BUILD_SHARED_LIBS (add_library
+          # without an explicit type); ATA_SHARED is ignored and produces a
+          # static libata.a instead of libata.so.
+          sed -i 's/-DATA_SHARED=ON/-DBUILD_SHARED_LIBS=ON/' scripts/build_native.cr
+          crystal run scripts/build_native.cr
 
       - name: Build release binary
         run: |

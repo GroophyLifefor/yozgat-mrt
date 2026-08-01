@@ -114,7 +114,7 @@ containing the binary, `libata.so` and `public/`.
 
 ```bash
 # Install (latest release) — root required
-curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-crystal/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/install.sh | sudo bash
 
 # Update to the latest release (with automatic rollback)
 sudo bash update.sh        # or fetch update.sh from the repo first
