@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Set up Yozgat</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="auth-wrap">
+      <div class="card">
+        <h1>Set up your admin account</h1>
+        <p class="sub">The first account is the administrator. There are no other users yet.</p>
+        <div id="error" class="error"></div>
+        <form id="setup-form">
+          <label for="email">Email</label>
+          <input type="email" id="email" autocomplete="username" required>
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="new-password" required minlength="8">
+          <label for="verify">Confirm password</label>
+          <input type="password" id="verify" autocomplete="new-password" required minlength="8">
+          <button type="submit" id="submit">Create admin account</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+    <script>
+      (async function () {
+        // If an account already exists, send the user to login.
+        const res = await fetch("/setup-status");
+        const data = await parseJson(res);
+        if (data && !data.needs_setup) location.href = "/login.html";
+      })();
+
+      document.getElementById("setup-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        hideError();
+        const submit = document.getElementById("submit");
+        submit.disabled = true;
+        submit.textContent = "Creating…";
+
+        try {
+          const res = await api("/auth/register", {
+            method: "POST",
+            body: JSON.stringify({
+              email: document.getElementById("email").value,
+              password: document.getElementById("password").value,
+              verifyPassword: document.getElementById("verify").value,
+            }),
+          });
+          const data = await parseJson(res);
+          if (res.ok && data && data.token) {
+            storeToken(data.token);
+            location.href = "/index.html";
+          } else {
+            showError((data && data.error) || "Registration failed");
+            submit.disabled = false;
+            submit.textContent = "Create admin account";
+          }
+        } catch (err) {
+          showError("Network error, try again");
+          submit.disabled = false;
+          submit.textContent = "Create admin account";
+        }
+      });
+    </script>
+  </body>
+</html>

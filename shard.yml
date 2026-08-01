@@ -1,0 +1,24 @@
+name: yozgat-crystal
+version: 0.1.0
+
+authors:
+  - Murat Kirazkaya <groophylifefor@gmail.com>
+
+targets:
+  yozgat-crystal:
+    main: src/main.cr
+
+dependencies:
+  ata-validator-crystal:
+    github: groophylifefor/ata-validator-crystal
+    version: ~> 0.1.0
+  kemal:
+    github: kemalcr/kemal
+    version: ~> 1.6.0
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+    version: ~> 0.23.0
+
+crystal: '>= 1.15.0'
+
+license: MIT

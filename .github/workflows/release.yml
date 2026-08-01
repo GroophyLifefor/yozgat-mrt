@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.15
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libsqlite3-dev
+
+      - name: Install shards
+        run: shards install
+
+      - name: Clone ata-validator source
+        run: git clone --depth 1 https://github.com/ata-core/ata-validator.git /tmp/ata-validator
+
+      - name: Build libata.so
+        working-directory: lib/ata-validator-crystal
+        env:
+          ATA_VALIDATOR_SRC: /tmp/ata-validator
+        run: crystal run scripts/build_native.cr
+
+      - name: Build release binary
+        run: |
+          crystal build src/main.cr --release --no-debug \
+            -o bin/yozgat \
+            --link-flags "-Llib/ata-validator-crystal/libata -lata"
+
+      - name: Package release bundle
+        shell: bash
+        run: |
+          bundle_dir="yozgat-x86_64-linux-gnu"
+          mkdir -p "${bundle_dir}/public"
+          cp bin/yozgat "${bundle_dir}/"
+          cp lib/ata-validator-crystal/libata/libata.so "${bundle_dir}/"
+          cp -r public/. "${bundle_dir}/public/"
+          tar -czf "yozgat-x86_64-linux-gnu.tar.gz" -C "${bundle_dir}" .
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: yozgat-x86_64-linux-gnu.tar.gz

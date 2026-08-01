@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in · Yozgat</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="auth-wrap">
+      <div class="card">
+        <h1>Sign in to Yozgat</h1>
+        <p class="sub">Manage your deployments.</p>
+        <div id="error" class="error"></div>
+        <form id="login-form">
+          <label for="email">Email</label>
+          <input type="email" id="email" autocomplete="username" required>
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password" required>
+          <button type="submit" id="submit">Sign in</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+    <script>
+      (async function () {
+        // If setup is still pending, the first admin must register first.
+        const res = await fetch("/setup-status");
+        const data = await parseJson(res);
+        if (data && data.needs_setup) location.href = "/setup.html";
+      })();
+
+      document.getElementById("login-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        hideError();
+        const submit = document.getElementById("submit");
+        submit.disabled = true;
+        submit.textContent = "Signing in…";
+
+        try {
+          const res = await api("/auth/login", {
+            method: "POST",
+            body: JSON.stringify({
+              email: document.getElementById("email").value,
+              password: document.getElementById("password").value,
+            }),
+          });
+          const data = await parseJson(res);
+          if (res.ok && data && data.token) {
+            storeToken(data.token);
+            location.href = "/index.html";
+          } else {
+            showError((data && data.error) || "Sign in failed");
+            submit.disabled = false;
+            submit.textContent = "Sign in";
+          }
+        } catch (err) {
+          showError("Network error, try again");
+          submit.disabled = false;
+          submit.textContent = "Sign in";
+        }
+      });
+    </script>
+  </body>
+</html>

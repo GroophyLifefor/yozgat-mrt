@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Yozgat</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">yoz<span>gat</span></div>
+      <div class="topbar-right">
+        <span class="user-chip" id="user-chip">…</span>
+        <button class="btn-ghost" id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <h2>Welcome</h2>
+      <p class="muted">Authentication is working. The deployment dashboard lands here next.</p>
+      <div class="meta" id="meta"></div>
+    </main>
+
+    <script src="/app.js"></script>
+    <script>
+      (async function () {
+        if (!getToken()) {
+          location.href = "/login.html";
+          return;
+        }
+
+        const res = await api("/auth/me");
+        const data = await parseJson(res);
+        if (res.status === 401 || !data || !data.user) {
+          clearToken();
+          location.href = "/login.html";
+          return;
+        }
+
+        const user = data.user;
+        document.getElementById("user-chip").textContent = user.email;
+        document.getElementById("meta").innerHTML =
+          '<span class="badge">' + (user.role || "user") + "</span>" +
+          '<span class="muted"> &nbsp; signed in</span>';
+      })();
+
+      document.getElementById("logout").addEventListener("click", logout);
+    </script>
+  </body>
+</html>

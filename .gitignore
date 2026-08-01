@@ -1,0 +1,8 @@
+/docs/
+/lib/
+/libata/
+/libsqlite/
+/bin/
+/data/
+/.shards/
+*.dwarf
