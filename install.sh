@@ -116,25 +116,23 @@ extract_asset_api_url() {
 }
 
 download_github_asset() {
-  # The assets API returns the binary only when called with
-  # Accept: application/octet-stream; otherwise it returns JSON metadata.
-  # With that header GitHub answers 302 -> S3, so capture the redirect and
-  # download the file from there (no auth needed for public repos).
+  # Public repos: hit the releases/latest/download URL directly — it always
+  # serves the real file (no API call, no JSON metadata to trip on).
   local asset_api_url=$1
   local output=$2
-  local redirect_url="" http_code
-  local -a auth_args=(-sS -w "%{redirect_url}" -o /dev/null -H "Accept: application/octet-stream")
+  local http_code
 
   if [[ -n "$GITHUB_TOKEN" ]]; then
-    auth_args+=(-H "Authorization: Bearer ${GITHUB_TOKEN}")
-  fi
-
-  redirect_url=$(curl "${auth_args[@]}" "$asset_api_url")
-
-  if [[ -n "$redirect_url" ]]; then
+    # Private repo: the assets API returns 302 -> S3 only when called with
+    # Accept: application/octet-stream, so capture the redirect and follow it.
+    local redirect_url
+    redirect_url=$(curl -sS -w "%{redirect_url}" -o /dev/null \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Accept: application/octet-stream" "$asset_api_url")
     http_code=$(curl -sS -L -w "%{http_code}" -o "$output" "$redirect_url")
   else
-    http_code=$(curl -sS -L -w "%{http_code}" -o "$output" -H "Accept: application/octet-stream" "$asset_api_url")
+    http_code=$(curl -sSL -w "%{http_code}" -o "$output" \
+      "https://github.com/${REPO}/releases/latest/download/${ARCHIVE_NAME}")
   fi
 
   [[ "$http_code" == "200" ]] || return 1
