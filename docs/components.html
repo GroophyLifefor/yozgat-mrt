@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Yozgat Components</title>
+
+<style>
+:root{
+
+--bg:#f6f4ef;
+--surface:#fcfbf8;
+--surface-alt:#f2efe8;
+
+--border:#d8d3c8;
+--border-dark:#bab3a6;
+
+--text:#202421;
+--muted:#636862;
+
+--primary:#304b39;
+--primary-hover:#284130;
+
+--success:#45694e;
+--warning:#9c6f33;
+--danger:#8d3d38;
+
+--radius:8px;
+--shadow:0 1px 2px rgba(0,0,0,.05);
+
+font-family:
+Inter,
+system-ui,
+sans-serif;
+
+}
+
+*{
+box-sizing:border-box;
+margin:0;
+padding:0;
+}
+
+body{
+background:
+repeating-linear-gradient(
+0deg,
+rgba(0,0,0,.012),
+rgba(0,0,0,.012) 1px,
+transparent 1px,
+transparent 8px),
+var(--bg);
+
+color:var(--text);
+line-height:1.55;
+padding:48px;
+}
+
+main{
+max-width:1200px;
+margin:auto;
+display:grid;
+gap:28px;
+}
+
+section{
+background:var(--surface);
+border:1px solid var(--border);
+border-radius:var(--radius);
+padding:28px;
+box-shadow:var(--shadow);
+}
+
+h1{
+font-size:38px;
+margin-bottom:8px;
+letter-spacing:-.04em;
+}
+
+h2{
+font-size:18px;
+margin-bottom:20px;
+letter-spacing:-.02em;
+}
+
+p{
+color:var(--muted);
+margin-bottom:20px;
+}
+
+.demo{
+display:flex;
+flex-wrap:wrap;
+gap:14px;
+align-items:center;
+}
+
+button{
+font:inherit;
+padding:10px 18px;
+border-radius:6px;
+cursor:pointer;
+transition:.12s;
+}
+
+.btn-primary{
+background:var(--primary);
+color:white;
+border:1px solid var(--primary);
+}
+
+.btn-primary:hover{
+background:var(--primary-hover);
+}
+
+.btn-secondary{
+background:white;
+border:1px solid var(--border-dark);
+}
+
+.btn-secondary:hover{
+background:var(--surface-alt);
+}
+
+.btn-danger{
+background:#fff;
+color:var(--danger);
+border:1px solid #d8b3af;
+}
+
+input:not([type="checkbox"]),
+textarea,
+select{
+
+width:100%;
+padding:11px 12px;
+border-radius:6px;
+border:1px solid var(--border);
+background:white;
+font:inherit;
+
+}
+
+input:not([type="checkbox"]):focus,
+textarea:focus,
+select:focus{
+
+outline:none;
+border-color:var(--primary);
+
+}
+
+input[type="checkbox"]{
+
+width:16px;
+height:16px;
+margin:0;
+flex-shrink:0;
+accent-color:var(--primary);
+
+}
+
+.field{
+display:grid;
+gap:8px;
+margin-bottom:18px;
+}
+
+.card{
+
+border:1px solid var(--border);
+background:white;
+border-radius:8px;
+padding:20px;
+width:280px;
+
+}
+
+.table{
+
+width:100%;
+border-collapse:collapse;
+
+}
+
+.table th{
+
+text-align:left;
+font-weight:600;
+padding:12px;
+border-bottom:1px solid var(--border);
+
+}
+
+.table td{
+
+padding:12px;
+border-bottom:1px solid var(--border);
+
+}
+
+.badge{
+
+display:inline-flex;
+padding:4px 10px;
+font-size:13px;
+font-weight:600;
+border-radius:999px;
+
+}
+
+.success{
+background:#e8efe8;
+color:var(--success);
+}
+
+.warning{
+background:#f4ebdf;
+color:var(--warning);
+}
+
+.danger{
+background:#f4e4e2;
+color:var(--danger);
+}
+
+.checkbox{
+display:flex;
+gap:10px;
+align-items:flex-start;
+cursor:pointer;
+}
+
+.checkbox input[type="checkbox"]{
+margin-top:3px;
+}
+
+.progress{
+
+width:320px;
+height:8px;
+background:#e5e1d9;
+border-radius:999px;
+overflow:hidden;
+
+}
+
+.progress div{
+
+height:100%;
+width:68%;
+background:var(--primary);
+
+}
+
+.nav{
+
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:14px 18px;
+background:white;
+border:1px solid var(--border);
+border-radius:8px;
+
+}
+
+.nav-links{
+
+display:flex;
+gap:18px;
+
+}
+
+.nav-links a{
+
+text-decoration:none;
+color:var(--muted);
+
+}
+
+.alert{
+
+padding:16px;
+border-left:4px solid var(--primary);
+background:#f4f2ec;
+
+}
+
+.stats{
+
+display:flex;
+gap:16px;
+flex-wrap:wrap;
+
+}
+
+.stat{
+
+background:white;
+border:1px solid var(--border);
+padding:18px;
+border-radius:8px;
+width:180px;
+
+}
+
+.stat h3{
+
+font-size:28px;
+
+}
+
+.code{
+
+background:#242824;
+color:#e6e7e5;
+padding:18px;
+border-radius:8px;
+font-family:ui-monospace,monospace;
+overflow:auto;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<main>
+
+<header>
+
+<h1>Yozgat Component Library</h1>
+
+<p>
+Components designed for infrastructure dashboards, deployment systems and operational software.
+</p>
+
+</header>
+
+<section>
+
+<h2>Navigation</h2>
+
+<div class="nav">
+
+<strong>YOZGAT</strong>
+
+<div class="nav-links">
+
+<a href="#">Applications</a>
+<a href="#">Deployments</a>
+<a href="#">Servers</a>
+<a href="#">Settings</a>
+
+</div>
+
+</div>
+
+</section>
+
+<section>
+
+<h2>Buttons</h2>
+
+<div class="demo">
+
+<button class="btn-primary">Deploy</button>
+
+<button class="btn-secondary">Cancel</button>
+
+<button class="btn-danger">Delete</button>
+
+</div>
+
+</section>
+
+<section>
+
+<h2>Inputs</h2>
+
+<div class="field">
+<label>Application Name</label>
+<input placeholder="my-api">
+</div>
+
+<div class="field">
+<label>Region</label>
+
+<select>
+
+<option>Germany</option>
+<option>Turkey</option>
+<option>Netherlands</option>
+
+</select>
+
+</div>
+
+<div class="field">
+<label>Description</label>
+<textarea rows="4"></textarea>
+</div>
+
+<label class="checkbox">
+
+<input type="checkbox">
+
+<span>Enable automatic deployments</span>
+
+</label>
+
+</section>
+
+<section>
+
+<h2>Status</h2>
+
+<div class="demo">
+
+<span class="badge success">Healthy</span>
+
+<span class="badge warning">Deploying</span>
+
+<span class="badge danger">Offline</span>
+
+</div>
+
+</section>
+
+<section>
+
+<h2>Cards</h2>
+
+<div class="demo">
+
+<div class="card">
+
+<h3>API Gateway</h3>
+
+<p>Production deployment.</p>
+
+<span class="badge success">Running</span>
+
+</div>
+
+<div class="card">
+
+<h3>Worker</h3>
+
+<p>Background queue.</p>
+
+<span class="badge warning">Updating</span>
+
+</div>
+
+</div>
+
+</section>
+
+<section>
+
+<h2>Progress</h2>
+
+<div class="progress">
+
+<div></div>
+
+</div>
+
+</section>
+
+<section>
+
+<h2>Statistics</h2>
+
+<div class="stats">
+
+<div class="stat">
+
+<p>Applications</p>
+
+<h3>42</h3>
+
+</div>
+
+<div class="stat">
+
+<p>Deployments</p>
+
+<h3>197</h3>
+
+</div>
+
+<div class="stat">
+
+<p>Servers</p>
+
+<h3>12</h3>
+
+</div>
+
+<div class="stat">
+
+<p>CPU</p>
+
+<h3>34%</h3>
+
+</div>
+
+</div>
+
+</section>
+
+<section>
+
+<h2>Alert</h2>
+
+<div class="alert">
+
+Deployment completed successfully. Configuration has been synchronized across all nodes.
+
+</div>
+
+</section>
+
+<section>
+
+<h2>Table</h2>
+
+<table class="table">
+
+<thead>
+
+<tr>
+
+<th>Name</th>
+<th>Status</th>
+<th>Version</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td>Frontend</td>
+
+<td><span class="badge success">Healthy</span></td>
+
+<td>v2.4.1</td>
+
+</tr>
+
+<tr>
+
+<td>Worker</td>
+
+<td><span class="badge warning">Deploying</span></td>
+
+<td>v2.5.0</td>
+
+</tr>
+
+<tr>
+
+<td>Gateway</td>
+
+<td><span class="badge success">Healthy</span></td>
+
+<td>v1.8.2</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+</section>
+
+<section>
+
+<h2>Code Block</h2>
+
+<div class="code">
+$ yozgat deploy production
+
+Deployment started...
+
+3 services updated
+
+Completed successfully
+</div>
+
+</section>
+
+</main>
+
+</body>
+</html>

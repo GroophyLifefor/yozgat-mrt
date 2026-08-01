@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yozgat Design System</title>
+
+<style>
+:root{
+    --bg:#f6f4ef;
+    --surface:#fcfbf8;
+    --surface-2:#f1eee7;
+
+    --text:#1f2320;
+    --muted:#5f665f;
+
+    --border:#d7d2c8;
+    --border-strong:#b8b1a5;
+
+    --primary:#2f4d38;
+    --primary-hover:#26412f;
+
+    --warning:#9d6d2d;
+    --danger:#8d3c34;
+    --success:#40684d;
+
+    --shadow:0 1px 2px rgba(0,0,0,.05);
+
+    --radius:8px;
+
+    --font:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        sans-serif;
+}
+
+*{
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
+}
+
+body{
+    background:
+        radial-gradient(circle at top,
+            rgba(255,255,255,.55),
+            transparent 65%),
+        repeating-linear-gradient(
+            0deg,
+            rgba(0,0,0,.012),
+            rgba(0,0,0,.012) 1px,
+            transparent 1px,
+            transparent 6px
+        ),
+        var(--bg);
+
+    color:var(--text);
+    font-family:var(--font);
+    line-height:1.55;
+}
+
+.wrapper{
+    max-width:1200px;
+    margin:auto;
+    padding:48px;
+}
+
+h1{
+    font-size:38px;
+    font-weight:700;
+    letter-spacing:-.04em;
+}
+
+h2{
+    font-size:22px;
+    margin-bottom:20px;
+    letter-spacing:-.02em;
+}
+
+h3{
+    font-size:16px;
+    margin-bottom:10px;
+}
+
+p{
+    color:var(--muted);
+}
+
+header{
+    margin-bottom:48px;
+}
+
+.grid{
+    display:grid;
+    gap:24px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+}
+
+.card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:24px;
+    box-shadow:var(--shadow);
+}
+
+.palette{
+    display:grid;
+    gap:12px;
+}
+
+.color{
+    display:flex;
+    align-items:center;
+    gap:14px;
+}
+
+.swatch{
+    width:42px;
+    height:42px;
+    border-radius:6px;
+    border:1px solid rgba(0,0,0,.08);
+}
+
+.button-row{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+}
+
+button{
+    font:inherit;
+    border-radius:6px;
+    cursor:pointer;
+    transition:.12s;
+    padding:10px 18px;
+}
+
+.primary{
+    background:var(--primary);
+    color:white;
+    border:1px solid var(--primary);
+}
+
+.primary:hover{
+    background:var(--primary-hover);
+}
+
+.secondary{
+    background:var(--surface);
+    color:var(--text);
+    border:1px solid var(--border-strong);
+}
+
+.secondary:hover{
+    background:var(--surface-2);
+}
+
+input{
+    width:100%;
+    margin-top:10px;
+    padding:11px 12px;
+    border-radius:6px;
+    border:1px solid var(--border);
+    background:white;
+    font:inherit;
+}
+
+input:focus{
+    outline:none;
+    border-color:var(--primary);
+}
+
+.status{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.badge{
+    display:inline-flex;
+    width:max-content;
+    padding:4px 10px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:600;
+}
+
+.success{
+    background:#e6efe8;
+    color:var(--success);
+}
+
+.warning{
+    background:#f4ebdd;
+    color:var(--warning);
+}
+
+.danger{
+    background:#f3e4e2;
+    color:var(--danger);
+}
+
+.type h4{
+    margin-top:18px;
+    margin-bottom:8px;
+}
+
+.type small{
+    color:var(--muted);
+}
+
+.rules ul{
+    padding-left:18px;
+    color:var(--muted);
+}
+
+.rules li{
+    margin-bottom:10px;
+}
+
+blockquote{
+    margin-top:20px;
+    border-left:4px solid var(--primary);
+    padding-left:16px;
+    color:var(--text);
+    font-weight:500;
+}
+
+footer{
+    margin-top:42px;
+    color:var(--muted);
+    font-size:14px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+<header>
+<h1>Yozgat</h1>
+
+<p>
+A self hosted deployment platform built with restraint. Every decision favors
+clarity, maintenance, and longevity over novelty.
+</p>
+</header>
+
+<div class="grid">
+
+<div class="card">
+<h2>Principles</h2>
+
+<div class="rules">
+<ul>
+<li>Quiet before expressive.</li>
+<li>Readable before stylish.</li>
+<li>Stable before exciting.</li>
+<li>Simple before clever.</li>
+<li>Built to age gracefully.</li>
+<li>Visual confidence through consistency.</li>
+</ul>
+</div>
+
+<blockquote>
+Trust comes from predictability, not decoration.
+</blockquote>
+
+</div>
+
+<div class="card">
+<h2>Color System</h2>
+
+<div class="palette">
+
+<div class="color">
+<div class="swatch" style="background:#f6f4ef"></div>
+<div>
+<strong>Background</strong><br>
+<small>#f6f4ef</small>
+</div>
+</div>
+
+<div class="color">
+<div class="swatch" style="background:#fcfbf8"></div>
+<div>
+<strong>Surface</strong><br>
+<small>#fcfbf8</small>
+</div>
+</div>
+
+<div class="color">
+<div class="swatch" style="background:#2f4d38"></div>
+<div>
+<strong>Primary</strong><br>
+<small>#2f4d38</small>
+</div>
+</div>
+
+<div class="color">
+<div class="swatch" style="background:#1f2320"></div>
+<div>
+<strong>Text</strong><br>
+<small>#1f2320</small>
+</div>
+</div>
+
+<div class="color">
+<div class="swatch" style="background:#d7d2c8"></div>
+<div>
+<strong>Border</strong><br>
+<small>#d7d2c8</small>
+</div>
+</div>
+
+</div>
+
+</div>
+
+<div class="card">
+
+<h2>Typography</h2>
+
+<div class="type">
+
+<h1 style="font-size:34px;">Heading</h1>
+
+<small>
+Inter or system font stack.
+Weight 700.
+Letter spacing slightly tightened.
+</small>
+
+<h4>Body</h4>
+
+<p>
+16px with generous line height. Designed for dashboards that operators read
+for hours rather than minutes.
+</p>
+
+<h4>Code</h4>
+
+<code>
+ui-monospace, SFMono-Regular, Consolas, monospace
+</code>
+
+</div>
+
+</div>
+
+<div class="card">
+
+<h2>Components</h2>
+
+<div class="button-row">
+<button class="primary">Deploy</button>
+<button class="secondary">Settings</button>
+</div>
+
+<div style="margin-top:22px">
+<label>Application Name</label>
+<input placeholder="my-service">
+</div>
+
+</div>
+
+<div class="card">
+
+<h2>Status</h2>
+
+<div class="status">
+<span class="badge success">Healthy</span>
+<span class="badge warning">Updating</span>
+<span class="badge danger">Offline</span>
+</div>
+
+</div>
+
+<div class="card">
+
+<h2>Interaction</h2>
+
+<ul style="padding-left:18px;color:var(--muted)">
+<li>Fast transitions under 150ms.</li>
+<li>No bouncing animations.</li>
+<li>No floating elements.</li>
+<li>No glass effects.</li>
+<li>Small radius between 6px and 8px.</li>
+<li>Thin borders instead of heavy shadows.</li>
+<li>Whitespace defines hierarchy.</li>
+</ul>
+
+</div>
+
+</div>
+
+<footer>
+
+Yozgat is not rustic or nostalgic. It is modern because it removes everything
+that does not help the operator accomplish their work.
+
+</footer>
+
+</div>
+
+</body>
+</html>

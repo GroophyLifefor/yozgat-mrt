@@ -13,11 +13,15 @@
         <p class="sub">Manage your deployments.</p>
         <div id="error" class="error"></div>
         <form id="login-form">
-          <label for="email">Email</label>
-          <input type="email" id="email" autocomplete="username" required>
-          <label for="password">Password</label>
-          <input type="password" id="password" autocomplete="current-password" required>
-          <button type="submit" id="submit">Sign in</button>
+          <div class="field">
+            <label for="email">Email</label>
+            <input type="email" id="email" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password" autocomplete="current-password" required>
+          </div>
+          <button type="submit" id="submit" class="primary">Sign in</button>
         </form>
       </div>
     </div>
