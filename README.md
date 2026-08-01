@@ -123,11 +123,14 @@ containing the binary, `libata.so` and `public/`.
 curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/install.sh | sudo bash
 
 # Update to the latest release (with automatic rollback)
-sudo bash update.sh        # or fetch update.sh from the repo first
+curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/update.sh | sudo bash
 
-# Uninstall
-sudo bash uninstall.sh            # removes everything incl. data
-sudo bash uninstall.sh --keep-data
+# Uninstall (removes everything incl. data)
+curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/uninstall.sh | sudo bash
+
+# Uninstall but keep the data directory
+curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/uninstall.sh -o uninstall.sh \
+  && sudo bash uninstall.sh --keep-data
 
 # Service management
 sudo systemctl status yozgat
