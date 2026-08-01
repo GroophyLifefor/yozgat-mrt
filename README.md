@@ -15,6 +15,9 @@ Crystal web application (Kemal) — the Crystal sibling of `yozgat-rust`.
   - `POST /auth/register` → creates first admin only (`409` if one exists)
   - `POST /auth/login` → `{token, expiresAt, user}`
   - `GET /auth/me` → current user (requires `Authorization: Bearer <token>`)
+- **OpenAPI docs**: compile-time spec generation via the `Ata.object` + `api`
+  macros. `GET /openapi.json` serves the OpenAPI 3.1 spec and `GET /docs`
+  renders it with Scalar.
 - **Storage**: SQLite (WAL, `busy_timeout=5000`, `synchronous=NORMAL`) with
   `PRAGMA user_version`-based migrations.
 - **Security**: `Crypto::Bcrypt` password hashing (pure Crystal, no C dep),
@@ -96,6 +99,9 @@ $env:PATH = "$PWD\libata;$PWD\libsqlite;$env:PATH"
 
 Open http://localhost:3000 — the first visit leads to the admin registration
 page.
+
+API docs are at http://localhost:3000/docs (Scalar UI) and the raw spec at
+`/openapi.json`.
 
 ## Configuration
 
