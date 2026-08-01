@@ -48,7 +48,7 @@ jobs:
         run: |
           crystal build src/main.cr --release --no-debug \
             -o bin/yozgat \
-            --link-flags "-Llib/ata-validator-crystal/libata -lata"
+            --link-flags "-L${GITHUB_WORKSPACE}/lib/ata-validator-crystal/libata -lata"
 
       - name: Package release bundle
         shell: bash
