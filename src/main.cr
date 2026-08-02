@@ -13,6 +13,7 @@ require "./app/*"
 Dir.mkdir_p(Yozgat::Config.data_dir)
 Dir.mkdir_p(Yozgat::Config.base_dir)
 Yozgat::Deploy.ensure_runtime_dirs!
+Yozgat::Config.ensure_public_ip!
 
 # Opens the SQLite DB, applies migrations, and recovers stale deploy state.
 Yozgat::DB.open!

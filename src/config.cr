@@ -3,6 +3,14 @@ module Yozgat
   module Config
     @@base_dir : String? = nil
     @@jwt_secret : String? = nil
+    @@public_ip : String? = nil
+
+    # Detects and caches public IP when YOZGAT_PUBLIC_IP is unset.
+    def self.ensure_public_ip! : Nil
+      return unless @@public_ip.nil?
+
+      @@public_ip = presence(ENV["YOZGAT_PUBLIC_IP"]?) || detect_local_ip
+    end
 
     def self.port : Int32
       ENV["PORT"]?.try(&.to_i) || 3000
@@ -25,16 +33,12 @@ module Yozgat
     end
 
     def self.public_ip : String?
-      presence(ENV["YOZGAT_PUBLIC_IP"]?)
+      @@public_ip
     end
 
     # Host used in OpenAPI server URLs and external links.
     def self.server_ip : String
-      if ip = public_ip
-        ip
-      else
-        detect_local_ip || "localhost"
-      end
+      public_ip || detect_local_ip || "localhost"
     end
 
     def self.openapi_servers : Array(String)

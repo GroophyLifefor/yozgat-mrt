@@ -221,6 +221,12 @@ chmod 750 "$ENV_DIR"
 # ── Write env file (only if it doesn't exist) ─
 if [[ ! -f "$ENV_FILE" ]]; then
   JWT_SECRET=$(generate_jwt_secret)
+  PUBLIC_IP=""
+  if command -v curl &>/dev/null; then
+    PUBLIC_IP=$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null || curl -4 -s --max-time 5 icanhazip.com 2>/dev/null || true)
+    PUBLIC_IP="${PUBLIC_IP//$'\r'/}"
+    PUBLIC_IP="${PUBLIC_IP//$'\n'/}"
+  fi
   info "Creating environment file at $ENV_FILE..."
   cat > "$ENV_FILE" <<EOF
 # Yozgat environment configuration
@@ -232,6 +238,9 @@ YOZGAT_DATA_DIR=$DATA_DIR
 YOZGAT_PUBLIC_DIR=$PUBLIC_DIR
 YOZGAT_JWT_SECRET=$JWT_SECRET
 EOF
+  if [[ -n "$PUBLIC_IP" ]]; then
+    echo "YOZGAT_PUBLIC_IP=$PUBLIC_IP" >> "$ENV_FILE"
+  fi
   chmod 640 "$ENV_FILE"
   chown root:"$SERVICE_USER" "$ENV_FILE"
 else
