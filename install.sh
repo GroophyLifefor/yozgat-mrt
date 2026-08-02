@@ -58,6 +58,36 @@ generate_jwt_secret() {
   fi
 }
 
+install_docker() {
+  info "Installing Docker..."
+  curl -fsSL https://get.docker.com | sh
+}
+
+ensure_runtime_deps() {
+  if ! command -v git &>/dev/null; then
+    info "Installing git..."
+    apt-get update
+    apt-get install -y git
+  fi
+
+  if ! command -v docker &>/dev/null; then
+    if can_prompt_user; then
+      if read_prompt -r -p "Docker is not installed. Install it now? [Y/n] " docker_reply; then
+        case "${docker_reply,,}" in
+          n|no) error "Docker is required for deployments. Install it and re-run this script." ;;
+          *) install_docker ;;
+        esac
+      else
+        install_docker
+      fi
+    else
+      install_docker
+    fi
+  fi
+
+  systemctl enable --now docker 2>/dev/null || true
+}
+
 GITHUB_TOKEN="${YOZGAT_GITHUB_TOKEN:-${GITHUB_TOKEN:-}}"
 
 prompt_github_pat() {
@@ -176,6 +206,8 @@ for cmd in curl systemctl tar; do
   command -v "$cmd" &>/dev/null || error "'$cmd' is required but not installed."
 done
 
+ensure_runtime_deps
+
 # ── Fetch latest release tag ────────────────
 info "Fetching latest release from GitHub..."
 fetch_latest_release
@@ -213,10 +245,19 @@ if ! id "$SERVICE_USER" &>/dev/null; then
   useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
 fi
 
+if getent group docker &>/dev/null; then
+  info "Adding '$SERVICE_USER' to 'docker' group..."
+  usermod -aG docker "$SERVICE_USER"
+else
+  warn "'docker' group not found. Re-run this script after Docker is running."
+fi
+
 # ── Create directories ───────────────────────
-mkdir -p "$ENV_DIR" "$DATA_DIR"
+mkdir -p "$ENV_DIR" "$DATA_DIR" "$DATA_DIR/.docker" "$DATA_DIR/tmp"
 chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR"
 chmod 750 "$ENV_DIR"
+chmod 750 "$DATA_DIR/.docker"
+chmod 750 "$DATA_DIR/tmp"
 
 # ── Write env file (only if it doesn't exist) ─
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -256,16 +297,20 @@ cat > "$SERVICE_FILE" <<'EOF'
 [Unit]
 Description=Yozgat Service (Crystal)
 Documentation=https://github.com/GroophyLifefor/yozgat-mrt
-After=network.target
+After=network.target docker.service
+Wants=docker.service
 
 [Service]
 Type=simple
 User=yozgat
-Group=yozgat
+Group=docker
+SupplementaryGroups=docker
 
 WorkingDirectory=/var/lib/yozgat
 EnvironmentFile=/etc/yozgat/env
 Environment=HOME=/var/lib/yozgat
+Environment=DOCKER_CONFIG=/var/lib/yozgat/.docker
+Environment=TMPDIR=/var/lib/yozgat/tmp
 Environment=LD_LIBRARY_PATH=/usr/local/lib/yozgat
 
 ExecStart=/usr/local/bin/yozgat

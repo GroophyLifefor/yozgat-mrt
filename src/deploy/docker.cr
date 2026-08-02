@@ -57,6 +57,8 @@ module Yozgat
       end
 
       def self.container_logs(base_dir : String, name : String, tail : Int32) : String
+        return "" unless docker_available?
+
         output = IO::Memory.new
         stderr = IO::Memory.new
         tail_s = tail.clamp(1, 1000).to_s
@@ -70,6 +72,19 @@ module Yozgat
         out = output.to_s
         err = stderr.to_s
         out.empty? ? err : (err.empty? ? out : "#{out}\n#{err}")
+      rescue
+        ""
+      end
+
+      def self.docker_available? : Bool
+        Process.run(
+          "docker",
+          ["version"],
+          output: Process::Redirect::Close,
+          error: Process::Redirect::Close,
+        ).success?
+      rescue
+        false
       end
 
       private def self.docker_env(base_dir : String, project_dir : String? = nil) : Hash(String, String)
