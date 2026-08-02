@@ -54,8 +54,10 @@ set "NEW_VERSION=!MAJOR!.!MINOR!.!PATCH!"
 
 echo Bumping version: !CURRENT! -^> !NEW_VERSION!
 
-rem 5. Rewrite the version line in shard.yml and commit it
-powershell -NoProfile -Command "(Get-Content -Raw 'shard.yml') -replace '(?m)^version:.*$', 'version: !NEW_VERSION!' | Set-Content -NoNewline 'shard.yml'"
+rem 5. Rewrite the top-level version line in shard.yml and commit it.
+rem    Only the line starting with "version:" (no leading spaces) is replaced —
+rem    dependency versions (indented) are never touched.
+powershell -NoProfile -Command "$l = Get-Content 'shard.yml'; for ($i = 0; $i -lt $l.Length; $i++) { if ($l[$i] -match '^version:') { $l[$i] = 'version: !NEW_VERSION!'; break } }; $l | Set-Content 'shard.yml'"
 if errorlevel 1 (
   echo error: failed to update shard.yml
   exit /b 1
