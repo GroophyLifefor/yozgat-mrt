@@ -73,6 +73,13 @@ a:hover { text-decoration: underline; }
   margin-bottom: .35rem;
 }
 
+.auth-logo {
+  display: block;
+  height: 64px;
+  width: auto;
+  margin: 0 auto 1rem;
+}
+
 .card p.sub {
   color: var(--muted);
   font-size: .9rem;
@@ -160,12 +167,18 @@ button:disabled {
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 700;
   font-size: 1rem;
   letter-spacing: .08em;
 }
 
-.brand span { color: var(--primary); }
+.brand-logo {
+  height: 22px;
+  width: auto;
+}
 
 .topbar-right {
   display: flex;
