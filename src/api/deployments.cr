@@ -38,7 +38,9 @@ module Yozgat
         deployment_id = Projects.parse_id(env, "deployment_id")
         return env.status(400).json({error: "invalid ids"}) unless project_id && deployment_id
 
-        tail = (query.tail || 100).clamp(1, 1000)
+        tail_raw = query.tail.try(&.strip)
+        tail = tail_raw && !tail_raw.empty? ? (tail_raw.to_i? || 100) : 100
+        tail = tail.clamp(1, 1000)
         logs = DB::Deployments.read_logs(project_id, deployment_id, tail)
         return env.status(404).json({error: "deployment not found"}) unless logs
 
@@ -71,7 +73,7 @@ Ata.object DeploymentResponse do
 end
 
 Ata.object DeploymentLogsQuery do
-  int :tail, optional: true
+  string :tail, optional: true
 end
 
 Ata.object DeploymentLogsBody do
