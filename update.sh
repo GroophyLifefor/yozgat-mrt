@@ -3,7 +3,7 @@ set -euo pipefail
 
 # ─────────────────────────────────────────────
 #  Yozgat (Crystal) Updater
-#  Usage: sudo bash update.sh
+#  Usage: sudo bash update.sh [-y]
 #  Uses the version recorded at install time (/etc/yozgat/version) and rolls
 #  back automatically if the new release fails its health check.
 # ─────────────────────────────────────────────
@@ -32,6 +32,21 @@ info()    { echo -e "${CYAN}[yozgat]${NC} $*"; }
 success() { echo -e "${GREEN}[yozgat]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[yozgat]${NC} $*"; }
 error()   { echo -e "${RED}[yozgat] ERROR:${NC} $*" >&2; exit 1; }
+
+ASSUME_YES=false
+for arg in "$@"; do
+  case "$arg" in
+    -y|--yes) ASSUME_YES=true ;;
+    -h|--help)
+      echo "Usage: sudo bash update.sh [-y]"
+      echo "  -y, --yes   Skip the update confirmation prompt (for scripts/CI)"
+      exit 0
+      ;;
+    *)
+      error "Unknown option: $arg (try -h for help)"
+      ;;
+  esac
+done
 
 can_prompt_user() { [[ -r /dev/tty ]]; }
 
@@ -209,8 +224,12 @@ info "Current version: ${CURRENT_TAG:-not installed}"
 info "New version:     ${LATEST_TAG}"
 
 # ── Confirm update ───────────────────────────
-if ! read_prompt -r -p "  Update now? [y/N] " confirm; then
-  error "Cannot prompt for confirmation. Pass input via tty."
+if [[ "$ASSUME_YES" == true ]]; then
+  confirm=y
+elif read_prompt -r -p "  Update now? [y/N] " confirm; then
+  :
+else
+  error "Cannot prompt for confirmation. Re-run with -y or attach a tty."
 fi
 [[ "${confirm,,}" == "y" || "${confirm,,}" == "yes" ]] || { echo "Aborted."; exit 0; }
 echo ""

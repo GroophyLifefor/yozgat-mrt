@@ -227,6 +227,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
 # Edit this file and run: sudo systemctl restart yozgat
 
 PORT=6637
+YOZGAT_ENV=production
 YOZGAT_DATA_DIR=$DATA_DIR
 YOZGAT_PUBLIC_DIR=$PUBLIC_DIR
 YOZGAT_JWT_SECRET=$JWT_SECRET

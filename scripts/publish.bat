@@ -58,12 +58,13 @@ rem 5. Rewrite the top-level version line in shard.yml and commit it.
 rem    Only the line starting with "version:" (no leading spaces) is replaced —
 rem    dependency versions (indented) are never touched.
 powershell -NoProfile -Command "$l = Get-Content 'shard.yml'; for ($i = 0; $i -lt $l.Length; $i++) { if ($l[$i] -match '^version:') { $l[$i] = 'version: !NEW_VERSION!'; break } }; $l | Set-Content 'shard.yml'"
+powershell -NoProfile -Command "(Get-Content 'src/version.cr') -replace 'VERSION = \".*\"', 'VERSION = \"!NEW_VERSION!\"' | Set-Content 'src/version.cr'"
 if errorlevel 1 (
   echo error: failed to update shard.yml
   exit /b 1
 )
 
-git add shard.yml
+git add shard.yml src/version.cr
 git commit -m "chore: bump version to !NEW_VERSION!"
 if errorlevel 1 (
   echo error: git commit failed
