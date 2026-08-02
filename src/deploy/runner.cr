@@ -1,6 +1,5 @@
 module Yozgat
   module Deploy
-    # Shared deploy orchestration (P7). Type-specific work is delegated in P8+.
     def self.start(project_id : Int64, environment_id : Int64, commit_hash : String) : Context
       ctx = DB::Deployments.create_record!(project_id, environment_id, commit_hash)
       spawn(ctx)
@@ -17,7 +16,12 @@ module Yozgat
     end
 
     def self.run(ctx : Context) : Nil
-      execute_stub!(ctx)
+      case DB::Projects.fetch_project_type(ctx.project_id)
+      when "static"
+        Static.execute!(ctx)
+      else
+        raise "unsupported project type for deployment"
+      end
     end
 
     def self.prepare_dirs!(ctx : Context) : String
@@ -40,26 +44,6 @@ module Yozgat
 
     def self.router_name(project_id : Int64, environment_id : Int64) : String
       "proj#{project_id}env#{environment_id}"
-    end
-
-    private def self.execute_stub!(ctx : Context) : Nil
-      prepare_dirs!(ctx)
-
-      DB::Deployments.update_project_status!(ctx.project_id, "deploying")
-      DB::Deployments.update_status!(ctx.deployment_id, "cloning")
-      Logs.append(ctx, "cloning repository (stub)")
-
-      DB::Deployments.update_status!(ctx.deployment_id, "starting")
-      Logs.append(ctx, "starting deployment (stub)")
-
-      DB::Deployments.update_status!(ctx.deployment_id, "running")
-      DB::Deployments.update_project_status!(ctx.project_id, "running")
-      Logs.append(ctx, "deployment running")
-
-      env_dir = Paths.environment_dir(ctx.project_id, ctx.env_slug)
-      Current.update(env_dir, ctx.deployment_slug)
-      Logs.append(ctx, "updated current pointer")
-      Logs.append(ctx, "deployment completed successfully")
     end
   end
 end

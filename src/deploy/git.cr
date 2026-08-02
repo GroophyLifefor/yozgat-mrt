@@ -1,3 +1,5 @@
+require "file_utils"
+
 module Yozgat
   module Deploy
     module Git
@@ -71,6 +73,35 @@ module Yozgat
       def self.branch_ref_ok?(branch : String) : Bool
         !branch.empty? && branch.size <= 128 &&
           branch.chars.all? { |c| c.alphanumeric? || c == '-' || c == '_' || c == '/' }
+      end
+
+      def self.clone_and_checkout(
+        repo_url : String,
+        username : String?,
+        token : String?,
+        dest : String,
+        commit_hash : String,
+      ) : Nil
+        FileUtils.rm_rf(dest) if Dir.exists?(dest)
+        url = authenticated_url(repo_url, username, token)
+
+        run_git!(["clone", "--no-checkout", url, dest], "git clone")
+        run_git_in!(dest, ["fetch", "--depth", "1", "origin", commit_hash], "git fetch")
+        run_git_in!(dest, ["checkout", "FETCH_HEAD"], "git checkout")
+      end
+
+      private def self.run_git!(args : Array(String), label : String) : Nil
+        stderr = IO::Memory.new
+        unless Process.run("git", args, output: Process::Redirect::Close, error: stderr, env: GIT_ENV).success?
+          raise "#{label} failed: #{stderr.to_s.strip}"
+        end
+      end
+
+      private def self.run_git_in!(dest : String, args : Array(String), label : String) : Nil
+        stderr = IO::Memory.new
+        unless Process.run("git", args, chdir: dest, output: Process::Redirect::Close, error: stderr, env: GIT_ENV).success?
+          raise "#{label} failed: #{stderr.to_s.strip}"
+        end
       end
 
       private def self.segment_ok?(s : String) : Bool

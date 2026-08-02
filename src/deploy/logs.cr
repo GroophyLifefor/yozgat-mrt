@@ -12,6 +12,17 @@ module Yozgat
         path = Paths.deploy_log_path(ctx.project_id, ctx.env_slug, ctx.deployment_slug)
         write_line(path, message)
       end
+
+      def self.tail_lines(text : String, max_lines : Int32) : String
+        lines = text.split('\n')
+        return text if lines.size <= max_lines
+        lines[-max_lines..].join("\n")
+      end
+
+      def self.read_file_tail(path : String, max_lines : Int32) : String
+        return "" unless File.exists?(path)
+        tail_lines(File.read(path), max_lines)
+      end
     end
   end
 end

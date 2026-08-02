@@ -19,6 +19,10 @@ module Yozgat
         !hash.empty? && hash.matches?(/^[0-9a-fA-F]{7,}$/)
       end
 
+      def self.fetch_project_type(project_id : Int64) : String?
+        Yozgat::DB::Projects.fetch_project_type(project_id)
+      end
+
       def self.environment_belongs?(project_id : Int64, env_id : Int64) : Bool
         Yozgat::DB.database.query_one?(
           "SELECT 1 FROM environments WHERE id = ?1 AND project_id = ?2",
@@ -31,14 +35,6 @@ module Yozgat
         Yozgat::DB.database.query_one?(
           "SELECT slug FROM environments WHERE id = ?1 AND project_id = ?2",
           env_id, project_id,
-          as: String,
-        )
-      end
-
-      def self.fetch_project_type(project_id : Int64) : String?
-        Yozgat::DB.database.query_one?(
-          "SELECT project_type FROM projects WHERE id = ?1",
-          project_id,
           as: String,
         )
       end
@@ -128,6 +124,46 @@ module Yozgat
           deployment_id,
           as: String,
         )
+      end
+
+      def self.read_logs(project_id : Int64, deployment_id : Int64, tail : Int32) : NamedTuple(
+        status: String,
+        deployLog: String,
+        containerLog: String,
+      )?
+        tail_n = tail.clamp(1, 1000)
+
+        row = Yozgat::DB.database.query_one?(
+          "SELECT d.status, d.deployment_slug, e.slug
+           FROM deployments d
+           JOIN environments e ON e.id = d.environment_id
+           WHERE d.project_id = ?1 AND d.id = ?2",
+          project_id, deployment_id,
+        ) do |rs|
+          {
+            status: rs.read(String),
+            slug:   rs.read(String?),
+            env:    rs.read(String),
+          }
+        end
+        return nil unless row
+        slug = row[:slug]
+        return nil unless slug
+
+        log_path = Yozgat::Deploy::Paths.deploy_log_path(project_id, row[:env], slug)
+        deploy_log = Yozgat::Deploy::Logs.read_file_tail(log_path, tail_n)
+
+        container_log = Yozgat::Deploy::Docker.container_logs(
+          Yozgat::Config.base_dir,
+          Yozgat::Deploy.container_name(project_id, row[:env], slug),
+          tail_n,
+        )
+
+        {
+          status:       row[:status],
+          deployLog:    deploy_log,
+          containerLog: container_log,
+        }
       end
 
       private def self.read_row(rs : ::DB::ResultSet) : Row

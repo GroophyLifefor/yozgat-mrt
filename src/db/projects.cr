@@ -38,6 +38,21 @@ module Yozgat
         authToken: String?,
       )
 
+      alias DeploySource = NamedTuple(
+        repoUrl: String,
+        authUsername: String?,
+        authToken: String?,
+        projectType: String,
+      )
+
+      def self.fetch_project_type(project_id : Int64) : String?
+        Yozgat::DB.database.query_one?(
+          "SELECT project_type FROM projects WHERE id = ?1",
+          project_id,
+          as: String,
+        )
+      end
+
       def self.list : Array(ListRow)
         rows = [] of ListRow
         Yozgat::DB.database.query(<<-SQL) do |rs|
@@ -66,6 +81,20 @@ module Yozgat
             repoUrl:      rs.read(String),
             authUsername: rs.read(String?),
             authToken:    rs.read(String?),
+          }
+        end
+      end
+
+      def self.deploy_source(id : Int64) : DeploySource
+        Yozgat::DB.database.query_one(
+          "SELECT repo_url, auth_username, auth_token, project_type FROM projects WHERE id = ?1",
+          id,
+        ) do |rs|
+          {
+            repoUrl:      rs.read(String),
+            authUsername: rs.read(String?),
+            authToken:    rs.read(String?),
+            projectType:  rs.read(String),
           }
         end
       end
