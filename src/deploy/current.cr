@@ -19,7 +19,7 @@ module Yozgat
         {% if flag?(:unix) %}
           target = File.readlink(pointer)
           return nil if target.empty?
-          Path[target].absolute?(env_dir) ? target : File.join(env_dir, target)
+          Path[target].absolute? ? target : File.join(env_dir, target)
         {% else %}
           slug = File.read(pointer).strip
           return nil if slug.empty?
