@@ -28,6 +28,19 @@ module Yozgat
       presence(ENV["YOZGAT_PUBLIC_IP"]?)
     end
 
+    # Host used in OpenAPI server URLs and external links.
+    def self.server_ip : String
+      if ip = public_ip
+        ip
+      else
+        detect_local_ip || "localhost"
+      end
+    end
+
+    def self.openapi_servers : Array(String)
+      ["http://#{server_ip}:#{port}"]
+    end
+
     def self.production? : Bool
       ENV["YOZGAT_ENV"]? == "production"
     end
@@ -63,6 +76,17 @@ module Yozgat
       return nil unless value
       stripped = value.strip
       stripped.empty? ? nil : stripped
+    end
+
+    private def self.detect_local_ip : String?
+      socket = UDPSocket.new
+      socket.connect("8.8.8.8", 80)
+      addr = socket.local_address
+      addr.is_a?(Socket::IPAddress) ? addr.address : nil
+    rescue
+      nil
+    ensure
+      socket.try(&.close)
     end
   end
 end

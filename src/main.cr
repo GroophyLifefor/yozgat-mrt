@@ -22,7 +22,7 @@ Yozgat::DB.recover_after_restart!
 Yozgat::OpenApi.setup(
   title: "Yozgat API",
   version: Yozgat::VERSION,
-  servers: ["http://localhost:#{Yozgat::Config.port}"],
+  servers: Yozgat::Config.openapi_servers,
 )
 
 Kemal.config.port = Yozgat::Config.port
