@@ -35,13 +35,13 @@ module Yozgat
            WHERE assigned_port IS NOT NULL
              AND status IN ('pending', 'cloning', 'building', 'starting', 'running')",
         ) do |rs|
-          used << rs.read(Int64)
+          rs.each { used << rs.read(Int64) }
         end
 
         Yozgat::DB.database.query(
           "SELECT host_port FROM environments WHERE host_port IS NOT NULL",
         ) do |rs|
-          used << rs.read(Int64)
+          rs.each { used << rs.read(Int64) }
         end
 
         (PORT_MIN..PORT_MAX).each do |port|

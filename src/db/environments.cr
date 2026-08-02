@@ -39,7 +39,7 @@ module Yozgat
            FROM environments WHERE project_id = ?1 ORDER BY id DESC",
           project_id,
         ) do |rs|
-          rows << read_row(rs)
+          rs.each { rows << read_row(rs) }
         end
         rows
       end

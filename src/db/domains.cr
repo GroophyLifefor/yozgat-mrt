@@ -9,7 +9,7 @@ module Yozgat
           "SELECT domain_name, port FROM domains WHERE project_id = ?1 AND environment_id = ?2 ORDER BY id",
           project_id, environment_id,
         ) do |rs|
-          rows << {domainName: rs.read(String), port: rs.read(Int64)}
+          rs.each { rows << {domainName: rs.read(String), port: rs.read(Int64)} }
         end
         rows
       end

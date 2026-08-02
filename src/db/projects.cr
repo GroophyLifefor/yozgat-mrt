@@ -60,7 +60,7 @@ module Yozgat
           FROM projects
           ORDER BY id DESC
         SQL
-          rows << read_list_row(rs)
+          rs.each { rows << read_list_row(rs) }
         end
         rows
       end
