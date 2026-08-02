@@ -70,6 +70,51 @@ module Yozgat
         hash
       end
 
+      def self.list_branches(url : String) : Array(String)
+        output = IO::Memory.new
+        stderr = IO::Memory.new
+        ok = Process.run(
+          "git",
+          ["ls-remote", "--heads", url],
+          output: output,
+          error: stderr,
+          env: GIT_ENV,
+        ).success?
+        unless ok
+          msg = stderr.to_s.strip
+          msg = "could not list branches" if msg.empty?
+          raise ArgumentError.new(msg)
+        end
+
+        branches = [] of String
+        output.to_s.each_line do |line|
+          t = line.strip
+          next if t.empty?
+          parts = t.split('\t', limit: 2)
+          next unless parts.size == 2
+
+          ref = parts[1]
+          next unless ref.starts_with?("refs/heads/")
+
+          name = ref["refs/heads/".size..]
+          branches << name if name && branch_ref_ok?(name)
+        end
+
+        raise ArgumentError.new("no branches found on the repository") if branches.empty?
+
+        branches.sort do |a, b|
+          rank = ->(name : String) {
+            case name
+            when "main"   then 0
+            when "master" then 1
+            else               2
+            end
+          }
+          cmp = rank.call(a) <=> rank.call(b)
+          cmp == 0 ? a <=> b : cmp
+        end
+      end
+
       def self.branch_ref_ok?(branch : String) : Bool
         !branch.empty? && branch.size <= 128 &&
           branch.chars.all? { |c| c.alphanumeric? || c == '-' || c == '_' || c == '/' }

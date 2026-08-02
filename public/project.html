@@ -194,6 +194,8 @@
           .map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + " (" + escapeHtml(e.slug) + ")</option>")
           .join("");
 
+        resolvedCommit = null;
+
         panel.innerHTML =
           '<div class="panel">' +
           "<h3>Deploy</h3>" +
@@ -202,12 +204,11 @@
             : "") +
           '<div class="field"><label for="deploy-env">Environment</label><select id="deploy-env">' + envOptions + "</select></div>" +
           '<div class="field-row">' +
-          '<div class="field"><label for="deploy-branch">Branch</label><input type="text" id="deploy-branch" value="main"></div>' +
-          '<div class="field"><label for="deploy-commit">Commit hash</label><input type="text" id="deploy-commit" readonly placeholder="Resolve branch first"></div>' +
+          '<div class="field"><label for="deploy-branch">Branch</label><select id="deploy-branch" disabled><option>Loading branches…</option></select></div>' +
+          '<div class="field"><label for="deploy-commit">Commit hash</label><input type="text" id="deploy-commit" readonly placeholder="Select a branch"></div>' +
           "</div>" +
           '<div class="actions">' +
-          '<button type="button" class="secondary inline" id="resolve-commit">Resolve commit</button>' +
-          '<button type="button" class="primary inline" id="start-deploy">Deploy</button>' +
+          '<button type="button" class="primary inline" id="start-deploy" disabled>Deploy</button>' +
           "</div>" +
           '<p id="deploy-status" class="hint"></p>' +
           "</div>" +
@@ -220,8 +221,80 @@
           '<textarea id="container-log" readonly></textarea>' +
           "</div>";
 
-        document.getElementById("resolve-commit").addEventListener("click", resolveCommit);
         document.getElementById("start-deploy").addEventListener("click", startDeploy);
+        loadDeployBranches();
+      }
+
+      async function loadDeployBranches() {
+        const select = document.getElementById("deploy-branch");
+        const status = document.getElementById("deploy-status");
+        if (!select) return;
+
+        const { res, data } = await apiJson("/projects/" + projectId + "/branches");
+        if (!select.isConnected) return;
+
+        if (!res.ok || !data || !Array.isArray(data.branches) || data.branches.length === 0) {
+          select.innerHTML = '<option value="">Could not load branches</option>';
+          select.disabled = true;
+          showError((data && data.error) || "Could not load branches");
+          return;
+        }
+
+        select.innerHTML = data.branches
+          .map((b) => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + "</option>")
+          .join("");
+        select.disabled = false;
+
+        select.addEventListener("change", () => resolveCommitForBranch());
+        if (status) status.textContent = data.branches.length + " branch(es) loaded";
+        await resolveCommitForBranch();
+      }
+
+      async function resolveCommitForBranch() {
+        hideError();
+        resolvedCommit = null;
+
+        const select = document.getElementById("deploy-branch");
+        const commitEl = document.getElementById("deploy-commit");
+        const deployBtn = document.getElementById("start-deploy");
+        const status = document.getElementById("deploy-status");
+        if (!select || !commitEl || !deployBtn) return;
+
+        const branch = select.value;
+        if (!branch) {
+          commitEl.value = "";
+          commitEl.placeholder = "Select a branch";
+          deployBtn.disabled = true;
+          return;
+        }
+
+        commitEl.value = "";
+        commitEl.placeholder = "Resolving latest commit…";
+        deployBtn.disabled = true;
+        select.disabled = true;
+
+        const { res, data } = await apiJson(
+          "/projects/" + projectId + "/resolve-commit?branch=" + encodeURIComponent(branch)
+        );
+
+        if (!select.isConnected) return;
+        select.disabled = false;
+
+        if (res.ok && data && data.commitHash) {
+          resolvedCommit = data.commitHash;
+          commitEl.value = resolvedCommit;
+          commitEl.placeholder = "";
+          deployBtn.disabled = project.projectType !== "static";
+          if (status) {
+            status.textContent = data.branch + " @ " + data.commitHash.slice(0, 7);
+          }
+          return;
+        }
+
+        commitEl.value = "";
+        commitEl.placeholder = "Could not resolve commit";
+        deployBtn.disabled = true;
+        showError((data && data.error) || "Could not resolve branch");
       }
 
       async function createEnvironment(e) {
@@ -264,36 +337,10 @@
         showError((data && data.error) || "Could not update port");
       }
 
-      async function resolveCommit() {
-        hideError();
-        resolvedCommit = null;
-        document.getElementById("deploy-commit").value = "";
-        const branch = document.getElementById("deploy-branch").value.trim() || "main";
-        const btn = document.getElementById("resolve-commit");
-        btn.disabled = true;
-        btn.textContent = "Resolving…";
-
-        const { res, data } = await apiJson(
-          "/projects/" + projectId + "/resolve-commit?branch=" + encodeURIComponent(branch)
-        );
-
-        btn.disabled = false;
-        btn.textContent = "Resolve commit";
-
-        if (res.ok && data && data.commitHash) {
-          resolvedCommit = data.commitHash;
-          document.getElementById("deploy-commit").value = resolvedCommit;
-          document.getElementById("deploy-status").textContent =
-            "Resolved " + data.branch + " → " + data.commitHash.slice(0, 7);
-          return;
-        }
-        showError((data && data.error) || "Could not resolve branch");
-      }
-
       async function startDeploy() {
         hideError();
         if (!resolvedCommit) {
-          showError("Resolve the branch to a commit hash first");
+          showError("Wait for the latest commit to load, or pick another branch");
           return;
         }
 

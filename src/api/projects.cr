@@ -95,16 +95,34 @@ module Yozgat
         creds = Yozgat::DB::Projects.auth_creds(id)
         return env.status(404).json({error: "project not found"}) unless creds
 
-        url = Yozgat::Deploy::Git.authenticated_url(
-          creds[:repoUrl],
-          creds[:authUsername],
-          creds[:authToken],
-        )
-
+        url = repo_git_url(creds)
         hash = Yozgat::Deploy::Git.resolve_branch_head(url, branch)
         env.status(200).json({commitHash: hash, branch: branch})
       rescue ex : ArgumentError
         env.status(502).json({error: ex.message})
+      end
+
+      def self.branches(env)
+        return unless require_auth(env)
+        id = parse_id(env)
+        return env.status(400).json({error: "invalid project id"}) unless id
+
+        creds = Yozgat::DB::Projects.auth_creds(id)
+        return env.status(404).json({error: "project not found"}) unless creds
+
+        url = repo_git_url(creds)
+        list = Yozgat::Deploy::Git.list_branches(url)
+        env.status(200).json({branches: list})
+      rescue ex : ArgumentError
+        env.status(502).json({error: ex.message})
+      end
+
+      private def self.repo_git_url(creds : Yozgat::DB::Projects::AuthCreds) : String
+        Yozgat::Deploy::Git.authenticated_url(
+          creds[:repoUrl],
+          creds[:authUsername],
+          creds[:authToken],
+        )
       end
 
       private def self.trim_opt(value : String?) : String?
@@ -177,6 +195,10 @@ Ata.object ResolveCommitResponse do
   string :branch, min: 1
 end
 
+Ata.object BranchListResponse do
+  array :branches, of: String
+end
+
 # ── Routes ──────────────────────────────────────────────────────
 
 api :get, "/projects",
@@ -228,4 +250,12 @@ api :get, "/projects/:id/resolve-commit",
   security: ["bearer_auth"],
   responses: {200 => ResolveCommitResponse, 400 => ErrorBody, 401 => ErrorBody, 404 => ErrorBody, 502 => ErrorBody} do
   Yozgat::API::Projects.resolve_commit(env, query)
+end
+
+api :get, "/projects/:id/branches",
+  summary: "List remote branch names for a project repository",
+  tags: ["projects"],
+  security: ["bearer_auth"],
+  responses: {200 => BranchListResponse, 400 => ErrorBody, 401 => ErrorBody, 404 => ErrorBody, 502 => ErrorBody} do
+  Yozgat::API::Projects.branches(env)
 end
