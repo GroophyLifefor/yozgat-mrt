@@ -1,15 +1,17 @@
-name: Release
+name: Cache libata
 
+# Populates libata.so cache in main branch scope so tag-triggered release
+# workflows can restore it (tags cannot read other tags' caches).
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build-and-upload:
+  cache-libata:
     runs-on: ubuntu-latest
 
     steps:
@@ -55,31 +57,5 @@ jobs:
         env:
           ATA_VALIDATOR_SRC: /tmp/ata-validator
         run: |
-          # ata-validator's CMake only honors BUILD_SHARED_LIBS (add_library
-          # without an explicit type); ATA_SHARED is ignored and produces a
-          # static libata.a instead of libata.so.
           sed -i 's/-DATA_SHARED=ON/-DBUILD_SHARED_LIBS=ON/' scripts/build_native.cr
           crystal run scripts/build_native.cr
-
-      - name: Build release binary
-        run: |
-          mkdir -p bin
-          crystal build src/main.cr --release --no-debug \
-            -o bin/yozgat \
-            --link-flags "-L${GITHUB_WORKSPACE}/lib/ata-validator-crystal/libata -lata"
-
-      - name: Package release bundle
-        shell: bash
-        run: |
-          bundle_dir="yozgat-x86_64-linux-gnu"
-          mkdir -p "${bundle_dir}/public"
-          cp bin/yozgat "${bundle_dir}/"
-          cp lib/ata-validator-crystal/libata/libata.so "${bundle_dir}/"
-          cp -r public/. "${bundle_dir}/public/"
-          tar -czf "yozgat-x86_64-linux-gnu.tar.gz" -C "${bundle_dir}" .
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: yozgat-x86_64-linux-gnu.tar.gz
