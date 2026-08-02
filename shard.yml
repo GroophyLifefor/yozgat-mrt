@@ -1,5 +1,5 @@
 name: yozgat-crystal
-version: 0.2.1
+version: 0.2.2
 
 authors:
   - Murat Kirazkaya <groophylifefor@gmail.com>
@@ -11,13 +11,13 @@ targets:
 dependencies:
   ata-validator-crystal:
     github: groophylifefor/ata-validator-crystal
-    version: ~> 0.2.0
+    version: 0.2.2
   kemal:
     github: kemalcr/kemal
-    version: ~> 1.6.0
+    version: 0.2.2
   sqlite3:
     github: crystal-lang/crystal-sqlite3
-    version: ~> 0.23.0
+    version: 0.2.2
 
 crystal: '>= 1.15.0'
 
