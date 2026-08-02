@@ -19,3 +19,8 @@ build:
 [unix]
 build:
   crystal build src/main.cr -o bin/yozgat --link-flags "-Llibata -Llibsqlite"
+
+# Publish a new release. Usage: just publish patch|minor
+[windows]
+publish bump:
+  scripts\publish.bat "{{bump}}"
