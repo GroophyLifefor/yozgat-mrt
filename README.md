@@ -4,23 +4,23 @@ Yozgat is a simple self-hosted deployment platform.
 
 ## Installation
 
+Install (latest release) — root required
 ```bash
-# Install (latest release) — root required
 curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/install.sh | sudo bash
 ```
 
+Update to the latest release (with automatic rollback if fails)
 ```bash
-# Update to the latest release (with automatic rollback if fails)
 curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/update.sh | sudo bash
 ```
 
+Uninstall (removes everything incl. data)
 ```bash	
-# Uninstall (removes everything incl. data)
 curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/uninstall.sh | sudo bash
 ```
 
+Uninstall but keep the data directory
 ```bash
-# Uninstall but keep the data directory
 curl -fsSL https://raw.githubusercontent.com/GroophyLifefor/yozgat-mrt/main/uninstall.sh -o uninstall.sh \
   && sudo bash uninstall.sh --keep-data
 ```
