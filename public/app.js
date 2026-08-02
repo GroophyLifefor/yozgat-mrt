@@ -88,3 +88,69 @@ async function parseJson(res) {
     return null;
   }
 }
+
+async function requireAuth() {
+  if (!getAccessToken()) {
+    location.href = "/login.html";
+    return null;
+  }
+  const res = await api("/auth/me");
+  const data = await parseJson(res);
+  if (res.status === 401 || !data || !data.user) {
+    clearToken();
+    location.href = "/login.html";
+    return null;
+  }
+  return data.user;
+}
+
+async function apiJson(path, options) {
+  const res = await api(path, options);
+  const data = await parseJson(res);
+  return { res, data };
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z").toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function statusClass(status) {
+  const s = (status || "").toLowerCase();
+  if (s === "running") return "status-ok";
+  if (s === "failed" || s === "removing") return "status-bad";
+  if (s === "deploying" || s === "pending" || s === "cloning" || s === "starting" || s === "building") {
+    return "status-warn";
+  }
+  return "status-muted";
+}
+
+function projectTypeLabel(t) {
+  if (t === "static") return "Static";
+  if (t === "dockerfile") return "Dockerfile";
+  if (t === "dockercompose") return "Compose";
+  return t || "—";
+}
+
+function queryParam(name) {
+  return new URLSearchParams(location.search).get(name);
+}
+
+function mountTopbar(user) {
+  const chip = document.getElementById("user-chip");
+  if (chip && user) chip.textContent = user.email;
+  const logoutBtn = document.getElementById("logout");
+  if (logoutBtn) logoutBtn.addEventListener("click", logout);
+}

@@ -3,15 +3,19 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Yozgat</title>
+    <title>Projects · Yozgat</title>
     <link rel="stylesheet" href="/style.css">
   </head>
   <body>
     <header class="topbar">
       <div class="brand">
-        <img src="/yozgat-logo-square.png" alt="Yozgat" class="brand-logo">
+        <img src="/yozgat-logo-square.png" alt="Yozgat" class="brand-logo" onerror="this.style.display='none'">
         <span>Yozgat</span>
       </div>
+      <nav>
+        <a href="/index.html">Projects</a>
+        <a href="/docs" target="_blank" rel="noopener">API docs</a>
+      </nav>
       <div class="topbar-right">
         <span class="user-chip" id="user-chip">…</span>
         <button class="secondary" id="logout" type="button">Sign out</button>
@@ -19,35 +23,83 @@
     </header>
 
     <main>
-      <h2>Welcome</h2>
-      <p class="muted">Authentication is working. The deployment dashboard lands here next.</p>
-      <div class="meta" id="meta"></div>
+      <div class="page-head">
+        <h2>Projects</h2>
+        <a href="/create-project.html"><button type="button" class="secondary inline">New project</button></a>
+      </div>
+
+      <div id="error" class="error"></div>
+      <div id="server-meta" class="hint" style="margin-bottom:1rem"></div>
+
+      <div class="panel" id="projects-panel">
+        <p class="muted">Loading…</p>
+      </div>
     </main>
 
     <script src="/app.js"></script>
     <script>
       (async function () {
-        if (!getAccessToken()) {
-          location.href = "/login.html";
-          return;
-        }
+        const user = await requireAuth();
+        if (!user) return;
+        mountTopbar(user);
 
-        const res = await api("/auth/me");
-        const data = await parseJson(res);
-        if (res.status === 401 || !data || !data.user) {
-          clearToken();
-          location.href = "/login.html";
-          return;
-        }
+        try {
+          const info = await apiJson("/server/info");
+          if (info.res.ok && info.data) {
+            const ip = info.data.publicIp || "—";
+            document.getElementById("server-meta").textContent =
+              "Server v" + (info.data.version || "?") + " · public IP " + ip;
+          }
+        } catch { /* optional */ }
 
-        const user = data.user;
-        document.getElementById("user-chip").textContent = user.email;
-        document.getElementById("meta").innerHTML =
-          '<span class="badge">' + (user.role || "user") + "</span>" +
-          '<span class="muted"> &nbsp; signed in</span>';
+        await loadProjects();
       })();
 
-      document.getElementById("logout").addEventListener("click", logout);
+      async function loadProjects() {
+        const panel = document.getElementById("projects-panel");
+        const { res, data } = await apiJson("/projects");
+        if (!res.ok) {
+          showError((data && data.error) || "Could not load projects");
+          panel.innerHTML = "";
+          return;
+        }
+
+        const projects = (data && data.projects) || [];
+        if (projects.length === 0) {
+          panel.innerHTML =
+            '<div class="empty">' +
+            "<h3>No projects yet</h3>" +
+            "<p>Connect a GitHub repository to deploy your first site.</p>" +
+            '<a href="/create-project.html"><button type="button" class="primary inline">New project</button></a>' +
+            "</div>";
+          return;
+        }
+
+        let html =
+          '<div class="table-wrap"><table><thead><tr>' +
+          "<th>Name</th><th>Status</th><th>Type</th><th>Repository</th><th>Created</th>" +
+          "</tr></thead><tbody>";
+
+        for (const p of projects) {
+          html +=
+            '<tr class="clickable" data-id="' + p.id + '">' +
+            "<td><strong>" + escapeHtml(p.name) + "</strong></td>" +
+            '<td><span class="status-pill ' + statusClass(p.status) + '">' + escapeHtml(p.status) + "</span></td>" +
+            "<td>" + escapeHtml(projectTypeLabel(p.projectType)) + "</td>" +
+            '<td class="mono">' + escapeHtml(p.repoUrl) + "</td>" +
+            "<td>" + escapeHtml(formatDate(p.createdAt)) + "</td>" +
+            "</tr>";
+        }
+
+        html += "</tbody></table></div>";
+        panel.innerHTML = html;
+
+        panel.querySelectorAll("tr.clickable").forEach((row) => {
+          row.addEventListener("click", () => {
+            location.href = "/project.html?id=" + row.dataset.id;
+          });
+        });
+      }
     </script>
   </body>
 </html>

@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Project · Yozgat</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img src="/yozgat-logo-square.png" alt="Yozgat" class="brand-logo" onerror="this.style.display='none'">
+        <span>Yozgat</span>
+      </div>
+      <nav>
+        <a href="/index.html">← Projects</a>
+        <a href="/docs" target="_blank" rel="noopener">API docs</a>
+      </nav>
+      <div class="topbar-right">
+        <span class="user-chip" id="user-chip">…</span>
+        <button class="secondary" id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main id="main">
+      <p class="muted">Loading…</p>
+    </main>
+
+    <script src="/app.js"></script>
+    <script>
+      const projectId = Number(queryParam("id"));
+      let project = null;
+      let environments = [];
+      let publicIp = null;
+      let pollTimer = null;
+      let activeDeployment = null;
+      let resolvedCommit = null;
+
+      (async function () {
+        if (!projectId) {
+          location.href = "/index.html";
+          return;
+        }
+
+        const user = await requireAuth();
+        if (!user) return;
+        mountTopbar(user);
+
+        const info = await apiJson("/server/info");
+        if (info.res.ok && info.data) publicIp = info.data.publicIp;
+
+        await loadAll();
+      })();
+
+      async function loadAll() {
+        const [{ res: pRes, data: pData }, { res: eRes, data: eData }] = await Promise.all([
+          apiJson("/projects/" + projectId),
+          apiJson("/projects/" + projectId + "/environments"),
+        ]);
+
+        if (!pRes.ok) {
+          renderError((pData && pData.error) || "Project not found");
+          return;
+        }
+
+        project = pData.project;
+        environments = (eData && eData.environments) || [];
+        render();
+      }
+
+      function renderError(msg) {
+        document.getElementById("main").innerHTML =
+          '<div class="page-head"><h2>Project</h2></div>' +
+          '<div id="error" class="error visible">' + escapeHtml(msg) + "</div>" +
+          '<a href="/index.html">Back to projects</a>';
+      }
+
+      function render() {
+        const main = document.getElementById("main");
+        main.innerHTML =
+          '<div class="page-head">' +
+          "<h2>" + escapeHtml(project.name) + "</h2>" +
+          '<span class="status-pill ' + statusClass(project.status) + '">' + escapeHtml(project.status) + "</span>" +
+          "</div>" +
+          '<div id="error" class="error"></div>' +
+          '<div id="live-banner"></div>' +
+          '<div class="tabs" role="tablist">' +
+          '<button type="button" class="tab active" data-tab="overview">Overview</button>' +
+          '<button type="button" class="tab" data-tab="environments">Environments</button>' +
+          '<button type="button" class="tab" data-tab="deploy">Deploy</button>' +
+          "</div>" +
+          '<div id="panel-overview" class="tab-panel active"></div>' +
+          '<div id="panel-environments" class="tab-panel"></div>' +
+          '<div id="panel-deploy" class="tab-panel"></div>';
+
+        main.querySelectorAll(".tab").forEach((btn) => {
+          btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+        });
+
+        renderOverview();
+        renderEnvironments();
+        renderDeploy();
+        updateLiveBanner();
+      }
+
+      function switchTab(name) {
+        document.querySelectorAll(".tab").forEach((t) => {
+          t.classList.toggle("active", t.dataset.tab === name);
+        });
+        document.querySelectorAll(".tab-panel").forEach((p) => {
+          p.classList.toggle("active", p.id === "panel-" + name);
+        });
+      }
+
+      function renderOverview() {
+        const panel = document.getElementById("panel-overview");
+        panel.innerHTML =
+          '<div class="panel">' +
+          '<dl class="meta-grid">' +
+          "<dt>Type</dt><dd>" + escapeHtml(projectTypeLabel(project.projectType)) + "</dd>" +
+          "<dt>Repository</dt><dd class=\"mono\">" + escapeHtml(project.repoUrl) + "</dd>" +
+          "<dt>Private repo</dt><dd>" + (project.hasPrivateCredentials ? "yes" : "no") + "</dd>" +
+          "<dt>Created</dt><dd>" + escapeHtml(formatDate(project.createdAt)) + "</dd>" +
+          "<dt>Webhook secret</dt><dd class=\"mono\">" + escapeHtml(project.webhookSecret) + "</dd>" +
+          "</dl>" +
+          '<div class="actions">' +
+          '<button type="button" class="danger inline" id="delete-project">Delete project</button>' +
+          "</div></div>";
+
+        document.getElementById("delete-project").addEventListener("click", deleteProject);
+      }
+
+      function renderEnvironments() {
+        const panel = document.getElementById("panel-environments");
+
+        let table = "";
+        if (environments.length) {
+          table =
+            '<div class="table-wrap"><table><thead><tr>' +
+            "<th>Name</th><th>Slug</th><th>Host port</th><th>Created</th><th></th>" +
+            "</tr></thead><tbody>";
+          for (const env of environments) {
+            table +=
+              "<tr>" +
+              "<td>" + escapeHtml(env.name) + "</td>" +
+              '<td class="mono">' + escapeHtml(env.slug) + "</td>" +
+              "<td>" + (env.hostPort != null ? env.hostPort : "—") + "</td>" +
+              "<td>" + escapeHtml(formatDate(env.createdAt)) + "</td>" +
+              '<td><button type="button" class="secondary inline edit-port" data-id="' + env.id + '" data-port="' + (env.hostPort || "") + '">Set port</button></td>' +
+              "</tr>";
+          }
+          table += "</tbody></table></div>";
+        } else {
+          table = '<p class="muted">No environments.</p>';
+        }
+
+        panel.innerHTML =
+          '<div class="panel">' +
+          "<h3>Environments</h3>" +
+          table +
+          "</div>" +
+          '<div class="panel">' +
+          "<h3>Add environment</h3>" +
+          '<form id="env-form">' +
+          '<div class="field-row">' +
+          '<div class="field"><label for="env-name">Name</label><input type="text" id="env-name" required></div>' +
+          '<div class="field"><label for="env-slug">Slug</label><input type="text" id="env-slug" required pattern="[a-zA-Z0-9._-]+"></div>' +
+          "</div>" +
+          '<div class="actions"><button type="submit" class="primary inline">Create</button></div>' +
+          "</form></div>";
+
+        document.getElementById("env-name").addEventListener("input", () => {
+          const slug = document.getElementById("env-slug");
+          if (slug.dataset.touched) return;
+          slug.value = document.getElementById("env-name").value
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "");
+        });
+        document.getElementById("env-slug").addEventListener("input", () => {
+          document.getElementById("env-slug").dataset.touched = "1";
+        });
+
+        document.getElementById("env-form").addEventListener("submit", createEnvironment);
+        panel.querySelectorAll(".edit-port").forEach((btn) => {
+          btn.addEventListener("click", () => editHostPort(Number(btn.dataset.id), btn.dataset.port));
+        });
+      }
+
+      function renderDeploy() {
+        const panel = document.getElementById("panel-deploy");
+        const envOptions = environments
+          .map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + " (" + escapeHtml(e.slug) + ")</option>")
+          .join("");
+
+        panel.innerHTML =
+          '<div class="panel">' +
+          "<h3>Deploy</h3>" +
+          (project.projectType !== "static"
+            ? '<p class="hint error">Only static projects can be deployed in this build. Type: ' + escapeHtml(project.projectType) + ".</p>"
+            : "") +
+          '<div class="field"><label for="deploy-env">Environment</label><select id="deploy-env">' + envOptions + "</select></div>" +
+          '<div class="field-row">' +
+          '<div class="field"><label for="deploy-branch">Branch</label><input type="text" id="deploy-branch" value="main"></div>' +
+          '<div class="field"><label for="deploy-commit">Commit hash</label><input type="text" id="deploy-commit" readonly placeholder="Resolve branch first"></div>' +
+          "</div>" +
+          '<div class="actions">' +
+          '<button type="button" class="secondary inline" id="resolve-commit">Resolve commit</button>' +
+          '<button type="button" class="primary inline" id="start-deploy">Deploy</button>' +
+          "</div>" +
+          '<p id="deploy-status" class="hint"></p>' +
+          "</div>" +
+          '<div class="panel" id="logs-panel" style="display:none">' +
+          "<h3>Deployment logs</h3>" +
+          '<p id="deployment-meta" class="hint"></p>' +
+          "<label>Deploy log</label>" +
+          '<textarea id="deploy-log" readonly></textarea>' +
+          "<label style=\"margin-top:1rem;display:block\">Container log</label>" +
+          '<textarea id="container-log" readonly></textarea>' +
+          "</div>";
+
+        document.getElementById("resolve-commit").addEventListener("click", resolveCommit);
+        document.getElementById("start-deploy").addEventListener("click", startDeploy);
+      }
+
+      async function createEnvironment(e) {
+        e.preventDefault();
+        hideError();
+        const name = document.getElementById("env-name").value.trim();
+        const slug = document.getElementById("env-slug").value.trim();
+        const { res, data } = await apiJson("/projects/" + projectId + "/environments", {
+          method: "POST",
+          body: JSON.stringify({ name, slug }),
+        });
+        if (res.ok && data && data.environment) {
+          environments.push(data.environment);
+          renderEnvironments();
+          renderDeploy();
+          document.getElementById("env-name").value = "";
+          document.getElementById("env-slug").value = "";
+          delete document.getElementById("env-slug").dataset.touched;
+          return;
+        }
+        showError((data && data.error) || "Could not create environment");
+      }
+
+      async function editHostPort(envId, current) {
+        const val = prompt("Host port (8000–8999, leave empty to clear):", current || "");
+        if (val === null) return;
+        const body = {};
+        if (val.trim()) body.hostPort = Number(val.trim());
+        else return showError("Enter a port number or cancel");
+
+        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        });
+        if (res.ok && data && data.environment) {
+          environments = environments.map((e) => (e.id === envId ? data.environment : e));
+          renderEnvironments();
+          return;
+        }
+        showError((data && data.error) || "Could not update port");
+      }
+
+      async function resolveCommit() {
+        hideError();
+        resolvedCommit = null;
+        document.getElementById("deploy-commit").value = "";
+        const branch = document.getElementById("deploy-branch").value.trim() || "main";
+        const btn = document.getElementById("resolve-commit");
+        btn.disabled = true;
+        btn.textContent = "Resolving…";
+
+        const { res, data } = await apiJson(
+          "/projects/" + projectId + "/resolve-commit?branch=" + encodeURIComponent(branch)
+        );
+
+        btn.disabled = false;
+        btn.textContent = "Resolve commit";
+
+        if (res.ok && data && data.commitHash) {
+          resolvedCommit = data.commitHash;
+          document.getElementById("deploy-commit").value = resolvedCommit;
+          document.getElementById("deploy-status").textContent =
+            "Resolved " + data.branch + " → " + data.commitHash.slice(0, 7);
+          return;
+        }
+        showError((data && data.error) || "Could not resolve branch");
+      }
+
+      async function startDeploy() {
+        hideError();
+        if (!resolvedCommit) {
+          showError("Resolve the branch to a commit hash first");
+          return;
+        }
+
+        const envId = Number(document.getElementById("deploy-env").value);
+        const btn = document.getElementById("start-deploy");
+        btn.disabled = true;
+        btn.textContent = "Starting…";
+
+        const { res, data } = await apiJson(
+          "/projects/" + projectId + "/environments/" + envId + "/deployments",
+          { method: "POST", body: JSON.stringify({ commitHash: resolvedCommit }) }
+        );
+
+        btn.disabled = false;
+        btn.textContent = "Deploy";
+
+        if (!res.ok || !data || !data.deployment) {
+          showError((data && data.error) || "Deploy failed to start");
+          return;
+        }
+
+        activeDeployment = data.deployment;
+        document.getElementById("logs-panel").style.display = "block";
+        document.getElementById("deploy-status").textContent =
+          "Deployment #" + activeDeployment.id + " · " + activeDeployment.status;
+        updateLiveBanner();
+        startPolling();
+      }
+
+      function startPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollLogs();
+        pollTimer = setInterval(pollLogs, 2000);
+      }
+
+      async function pollLogs() {
+        if (!activeDeployment) return;
+
+        const { res, data } = await apiJson(
+          "/projects/" + projectId + "/deployments/" + activeDeployment.id + "/logs?tail=300"
+        );
+
+        if (!res.ok || !data || !data.logs) return;
+
+        const logs = data.logs;
+        activeDeployment.status = logs.status;
+        document.getElementById("deploy-log").value = logs.deployLog || "";
+        document.getElementById("container-log").value = logs.containerLog || "";
+        document.getElementById("deployment-meta").textContent =
+          "Status: " + logs.status + " · commit " + (activeDeployment.commitHash || "").slice(0, 7);
+
+        document.getElementById("deploy-status").textContent =
+          "Deployment #" + activeDeployment.id + " · " + logs.status;
+
+        if (logs.status === "running" || logs.status === "failed") {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          if (logs.status === "running") {
+            const fresh = await apiJson("/projects/" + projectId);
+            if (fresh.res.ok && fresh.data && fresh.data.project) {
+              project = fresh.data.project;
+              const pill = document.querySelector(".page-head .status-pill");
+              if (pill) {
+                pill.textContent = project.status;
+                pill.className = "status-pill " + statusClass(project.status);
+              }
+            }
+          }
+        }
+
+        updateLiveBanner();
+      }
+
+      function liveUrl() {
+        const port = activeDeployment && activeDeployment.assignedPort;
+        if (!publicIp || !port || activeDeployment.status !== "running") return null;
+        return "http://" + publicIp + ":" + port;
+      }
+
+      function updateLiveBanner() {
+        const el = document.getElementById("live-banner");
+        if (!el) return;
+        const url = liveUrl();
+        if (!url) {
+          el.innerHTML = "";
+          return;
+        }
+        el.innerHTML =
+          '<div class="live-url">' +
+          "<span>Live at</span>" +
+          '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(url) + "</a>" +
+          "</div>";
+      }
+
+      async function deleteProject() {
+        if (!confirm("Delete “" + project.name + "” and all its data? This cannot be undone.")) return;
+        const { res, data } = await apiJson("/projects/" + projectId, { method: "DELETE" });
+        if (res.ok) {
+          location.href = "/index.html";
+          return;
+        }
+        showError((data && data.error) || "Could not delete project");
+      }
+    </script>
+  </body>
+</html>

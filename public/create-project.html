@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>New project · Yozgat</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img src="/yozgat-logo-square.png" alt="Yozgat" class="brand-logo" onerror="this.style.display='none'">
+        <span>Yozgat</span>
+      </div>
+      <nav>
+        <a href="/index.html">← Projects</a>
+      </nav>
+      <div class="topbar-right">
+        <span class="user-chip" id="user-chip">…</span>
+        <button class="secondary" id="logout" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="page-head">
+        <h2>Create project</h2>
+      </div>
+
+      <div id="error" class="error"></div>
+
+      <div class="panel">
+        <form id="create-form">
+          <div class="field">
+            <label for="name">Name</label>
+            <input type="text" id="name" required autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="repoUrl">GitHub repository URL</label>
+            <input type="url" id="repoUrl" required placeholder="https://github.com/org/repo">
+            <p id="repo-hint" class="hint"></p>
+          </div>
+          <div id="private-fields" style="display:none">
+            <div class="field">
+              <label for="authUsername">GitHub username</label>
+              <input type="text" id="authUsername" autocomplete="off" placeholder="x-access-token or username">
+            </div>
+            <div class="field">
+              <label for="authToken">Personal access token</label>
+              <input type="password" id="authToken" autocomplete="new-password">
+            </div>
+          </div>
+          <div class="field">
+            <label for="projectType">Project type</label>
+            <select id="projectType">
+              <option value="static">Static site</option>
+              <option value="dockerfile" disabled>Dockerfile (coming soon)</option>
+              <option value="dockercompose" disabled>Docker Compose (coming soon)</option>
+            </select>
+            <p class="hint">Static deploy is available for testing. Other types arrive in later phases.</p>
+          </div>
+          <div class="actions">
+            <button type="submit" class="primary inline" id="submit">Create project</button>
+            <a href="/index.html"><button type="button" class="secondary inline">Cancel</button></a>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <script src="/app.js"></script>
+    <script>
+      let repoCheckTimer = null;
+      let repoIsPublic = null;
+
+      (async function () {
+        const user = await requireAuth();
+        if (!user) return;
+        mountTopbar(user);
+      })();
+
+      document.getElementById("repoUrl").addEventListener("input", () => {
+        repoIsPublic = null;
+        clearTimeout(repoCheckTimer);
+        repoCheckTimer = setTimeout(checkRepo, 450);
+      });
+
+      async function checkRepo() {
+        const hint = document.getElementById("repo-hint");
+        const url = document.getElementById("repoUrl").value.trim();
+        if (!url) {
+          hint.textContent = "";
+          hint.className = "hint";
+          document.getElementById("private-fields").style.display = "none";
+          return;
+        }
+
+        hint.textContent = "Checking repository…";
+        hint.className = "hint";
+
+        const { res, data } = await apiJson("/projects/check-repo", {
+          method: "POST",
+          body: JSON.stringify({ repoUrl: url }),
+        });
+
+        if (!res.ok) {
+          hint.textContent = (data && data.error) || "Could not check repository";
+          hint.className = "hint error";
+          document.getElementById("private-fields").style.display = "none";
+          return;
+        }
+
+        repoIsPublic = data.isPublic;
+        if (data.normalizedUrl) {
+          document.getElementById("repoUrl").value = data.normalizedUrl.replace(/\.git$/, "");
+        }
+
+        if (data.isPublic) {
+          hint.textContent = "Public repository — no credentials needed.";
+          hint.className = "hint ok";
+          document.getElementById("private-fields").style.display = "none";
+        } else {
+          hint.textContent = "Private repository — enter GitHub credentials below.";
+          hint.className = "hint";
+          document.getElementById("private-fields").style.display = "block";
+        }
+      }
+
+      document.getElementById("create-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        hideError();
+
+        const submit = document.getElementById("submit");
+        submit.disabled = true;
+        submit.textContent = "Creating…";
+
+        const body = {
+          name: document.getElementById("name").value.trim(),
+          repoUrl: document.getElementById("repoUrl").value.trim(),
+          projectType: document.getElementById("projectType").value,
+        };
+
+        if (repoIsPublic === false) {
+          body.authUsername = document.getElementById("authUsername").value.trim();
+          body.authToken = document.getElementById("authToken").value.trim();
+        }
+
+        const { res, data } = await apiJson("/projects", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+
+        if (res.ok && data && data.project) {
+          location.href = "/project.html?id=" + data.project.id;
+          return;
+        }
+
+        showError((data && data.error) || "Could not create project");
+        submit.disabled = false;
+        submit.textContent = "Create project";
+      });
+    </script>
+  </body>
+</html>
