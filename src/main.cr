@@ -1,6 +1,5 @@
 require "kemal"
 require "sqlite3"
-require "crypto/bcrypt"
 require "ata-validator-crystal"
 
 require "./config"

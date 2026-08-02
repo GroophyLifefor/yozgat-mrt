@@ -57,8 +57,8 @@
             }),
           });
           const data = await parseJson(res);
-          if (res.ok && data && data.token) {
-            storeToken(data.token);
+          if (res.ok && data && data.accessToken) {
+            storeSession(data);
             location.href = "/index.html";
           } else {
             showError((data && data.error) || "Registration failed");

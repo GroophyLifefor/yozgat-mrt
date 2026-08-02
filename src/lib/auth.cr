@@ -1,14 +1,17 @@
 require "crypto/bcrypt"
 require "crypto/subtle"
-require "json"
-require "openssl/hmac"
+require "digest/sha256"
 require "base64"
+require "jwt"
+require "json"
 
 module Yozgat
   module Auth
-    TOKEN_TTL_SECONDS = 24 * 60 * 60
+    ACCESS_TTL         = 15.minutes
+    REFRESH_TTL_SEC    = 30 * 24 * 60 * 60
+    REFRESH_RAW_BYTES  = 32
 
-    alias Claims = NamedTuple(uid: Int64, email: String, role: String)
+    alias Claims = NamedTuple(sub: String, email: String, role: String)
 
     def self.hash_password(password : String) : String
       Crypto::Bcrypt.hash_secret(password)
@@ -20,35 +23,46 @@ module Yozgat
       false
     end
 
-    # HMAC-signed token: base64url(payload).hex(HMAC-SHA256). Stateless —
-    # logout is purely client-side (drop the token).
-    def self.sign_token(user_id : Int64, email : String, role : String) : String
-      exp = Time.utc.to_unix + TOKEN_TTL_SECONDS
-      payload = {uid: user_id, email: email, role: role, exp: exp}.to_json
-      encoded = Base64.urlsafe_encode(payload)
-      sig = OpenSSL::HMAC.hexdigest(OpenSSL::Algorithm::SHA256, Yozgat::Config.jwt_secret, encoded)
-      "#{encoded}.#{sig}"
+    def self.sign_access_token(user_id : Int64, email : String, role : String) : String
+      payload = {
+        "sub"   => user_id.to_s,
+        "email" => email,
+        "role"  => role,
+        "exp"   => (Time.utc + ACCESS_TTL).to_unix,
+      }
+      JWT.encode(payload, Config.jwt_secret, JWT::Algorithm::HS256)
     end
 
-    def self.verify_token(token : String) : Claims?
-      parts = token.split('.', 2)
-      return nil unless parts.size == 2
-      encoded, sig = parts
+    def self.verify_access_token(token : String) : Claims?
+      payload, _header = JWT.decode(
+        token,
+        Config.jwt_secret,
+        JWT::Algorithm::HS256,
+        validate: true,
+      )
 
-      expected = OpenSSL::HMAC.hexdigest(OpenSSL::Algorithm::SHA256, Yozgat::Config.jwt_secret, encoded)
-      return nil unless Crypto::Subtle.constant_time_compare(sig.to_slice, expected.to_slice)
-
-      payload = JSON.parse(Base64.decode_string(encoded))
-      exp = payload["exp"]?.try(&.as_i64)
-      return nil unless exp && exp > Time.utc.to_unix
-
-      uid = payload["uid"]?.try(&.as_i64)
+      sub = payload["sub"]?.try(&.as_s)
       email = payload["email"]?.try(&.as_s)
       role = payload["role"]?.try(&.as_s)
-      return nil unless uid && email && role
+      return nil unless sub && email && role
 
-      {uid: uid, email: email, role: role}
-    rescue JSON::ParseException
+      {sub: sub, email: email, role: role}
+    rescue JWT::Error
+      nil
+    end
+
+    def self.mint_refresh_token : Tuple(String, String)
+      raw = Random::Secure.random_bytes(REFRESH_RAW_BYTES)
+      plain = Base64.urlsafe_encode(raw)
+      hash = Digest::SHA256.hexdigest(raw)
+      {plain, hash}
+    end
+
+    def self.hash_refresh_plain(plain : String) : String?
+      raw = Base64.decode_string(plain.strip)
+      return nil unless raw.bytesize == REFRESH_RAW_BYTES
+      Digest::SHA256.hexdigest(raw)
+    rescue Base64::Error
       nil
     end
 
@@ -63,7 +77,13 @@ module Yozgat
 
     def self.authenticated(env : HTTP::Server::Context) : Claims?
       return nil unless (token = bearer_token(env.request.headers))
-      verify_token(token)
+      verify_access_token(token)
+    end
+
+    def self.user_agent(headers : HTTP::Headers) : String?
+      ua = headers["User-Agent"]?
+      return nil unless ua
+      ua.size > 512 ? ua[0, 512] : ua
     end
   end
 end

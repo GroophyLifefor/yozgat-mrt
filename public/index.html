@@ -27,7 +27,7 @@
     <script src="/app.js"></script>
     <script>
       (async function () {
-        if (!getToken()) {
+        if (!getAccessToken()) {
           location.href = "/login.html";
           return;
         }

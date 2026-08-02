@@ -1,28 +1,72 @@
 // Shared client helpers for the Yozgat dashboard.
-const TOKEN_KEY = "yozgat_token";
+const ACCESS_TOKEN_KEY = "yozgat_access_token";
+const REFRESH_TOKEN_KEY = "yozgat_refresh_token";
 
-function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+function getAccessToken() {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-function storeToken(token) {
-  localStorage.setItem(TOKEN_KEY, token);
+function getRefreshToken() {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+function storeSession(data) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
 }
 
 function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
-function logout() {
+async function logout() {
+  const refreshToken = getRefreshToken();
+  if (refreshToken) {
+    try {
+      await api("/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {
+      // best-effort revoke
+    }
+  }
   clearToken();
   location.href = "/login.html";
 }
 
+async function refreshAccessToken() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  const res = await fetch("/auth/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  const data = await parseJson(res);
+  if (!res.ok || !data || !data.accessToken) return null;
+  storeSession(data);
+  return data.accessToken;
+}
+
 async function api(path, options = {}) {
   const headers = Object.assign({ "Content-Type": "application/json" }, options.headers || {});
-  const token = getToken();
+  const token = getAccessToken();
   if (token) headers["Authorization"] = "Bearer " + token;
-  return fetch(path, Object.assign({}, options, { headers }));
+
+  let res = await fetch(path, Object.assign({}, options, { headers }));
+
+  if (res.status === 401 && getRefreshToken() && !options._retried) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      headers["Authorization"] = "Bearer " + newToken;
+      res = await fetch(path, Object.assign({}, options, { headers, _retried: true }));
+    }
+  }
+
+  return res;
 }
 
 function showError(message) {

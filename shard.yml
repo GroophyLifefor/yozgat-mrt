@@ -18,6 +18,9 @@ dependencies:
   sqlite3:
     github: crystal-lang/crystal-sqlite3
     version: 0.23.0
+  jwt:
+    github: crystal-community/jwt
+    version: ~> 1.6.0
 
 crystal: '>= 1.15.0'
 
