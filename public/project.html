@@ -240,13 +240,21 @@
           return;
         }
 
-        select.innerHTML = data.branches
+        const branchNames = data.branches.map((b) => (typeof b === "string" ? b : b.name)).filter(Boolean);
+        if (branchNames.length === 0) {
+          select.innerHTML = '<option value="">No branches found</option>';
+          select.disabled = true;
+          showError("No branches found");
+          return;
+        }
+
+        select.innerHTML = branchNames
           .map((b) => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + "</option>")
           .join("");
         select.disabled = false;
 
         select.addEventListener("change", () => resolveCommitForBranch());
-        if (status) status.textContent = data.branches.length + " branch(es) loaded";
+        if (status) status.textContent = branchNames.length + " branch(es) loaded";
         await resolveCommitForBranch();
       }
 

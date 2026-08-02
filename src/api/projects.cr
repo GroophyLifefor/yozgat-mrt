@@ -112,7 +112,7 @@ module Yozgat
 
         url = repo_git_url(creds)
         list = Yozgat::Deploy::Git.list_branches(url)
-        env.status(200).json({branches: list})
+        env.status(200).json({branches: list.map { |name| {name: name} }})
       rescue ex : ArgumentError
         env.status(502).json({error: ex.message})
       end
@@ -195,8 +195,12 @@ Ata.object ResolveCommitResponse do
   string :branch, min: 1
 end
 
+Ata.object BranchItem do
+  string :name, min: 1
+end
+
 Ata.object BranchListResponse do
-  array :branches, of: String
+  array :branches, of: BranchItem
 end
 
 # ── Routes ──────────────────────────────────────────────────────
