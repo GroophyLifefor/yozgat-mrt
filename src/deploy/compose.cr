@@ -38,16 +38,20 @@ module Yozgat
         validate_compose!(compose_path, has_domains: has_domains, domain_names: domain_names)
         Logs.write_line(log_path, "compose validation passed")
 
+        env_file_path = File.join(deploy_dir, ".env")
+        has_env_vars = EnvVars.write_file!(ctx.project_id, ctx.environment_id, env_file_path)
+        Logs.write_line(log_path, "wrote environment file") if has_env_vars
+
         DB::Deployments.update_status!(ctx.deployment_id, "starting")
         Logs.write_line(log_path, "starting containers from user compose file")
 
-        unless Docker.compose_up(base, deploy_dir, compose_path, log_path, build: false)
-          Docker.compose_down(base, deploy_dir, compose_path)
+        unless Docker.compose_up(base, deploy_dir, compose_path, log_path, build: false, use_env_file: has_env_vars)
+          Docker.compose_down(base, deploy_dir, compose_path, use_env_file: has_env_vars)
           raise "docker compose up failed"
         end
 
-        unless Docker.wait_for_compose_services(base, deploy_dir, compose_path)
-          Docker.compose_down(base, deploy_dir, compose_path)
+        unless Docker.wait_for_compose_services(base, deploy_dir, compose_path, use_env_file: has_env_vars)
+          Docker.compose_down(base, deploy_dir, compose_path, use_env_file: has_env_vars)
           raise "Your app did not start within 60 seconds. Check the app logs below."
         end
 

@@ -14,6 +14,7 @@
       </div>
       <nav>
         <a href="/index.html">← Projects</a>
+        <a href="#" id="nav-map">Map</a>
         <a href="/docs" target="_blank" rel="noopener">API docs</a>
       </nav>
       <div class="topbar-right">
@@ -38,6 +39,8 @@
       let deployments = [];
       let domains = [];
       let domainsEnvId = null;
+      let envVars = [];
+      let envVarsEnvId = null;
 
       (async function () {
         if (!projectId) {
@@ -71,6 +74,13 @@
         environments = (eData && eData.environments) || [];
         deployments = (dRes.ok && dData && dData.deployments) ? dData.deployments : [];
         render();
+        updateMapLink();
+        applyHashTab();
+      }
+
+      function updateMapLink() {
+        const link = document.getElementById("nav-map");
+        if (link) link.href = "/map.html?project=" + projectId;
       }
 
       async function refreshDeployments() {
@@ -175,7 +185,10 @@
         });
       }
 
-      function switchTab(name) {
+      function switchTab(name, updateHash) {
+        if (updateHash !== false) {
+          history.replaceState(null, "", "#" + name);
+        }
         document.querySelectorAll(".tab").forEach((t) => {
           t.classList.toggle("active", t.dataset.tab === name);
         });
@@ -183,6 +196,19 @@
           p.classList.toggle("active", p.id === "panel-" + name);
         });
       }
+
+      function applyHashTab() {
+        const tab = (location.hash || "").replace("#", "");
+        if (tab === "logs") {
+          switchTab("deploy", false);
+          return;
+        }
+        if (["overview", "environments", "deployments", "deploy"].includes(tab)) {
+          switchTab(tab, false);
+        }
+      }
+
+      window.addEventListener("hashchange", applyHashTab);
 
       function renderOverview() {
         const panel = document.getElementById("panel-overview");
@@ -318,6 +344,20 @@
           '<p id="domain-verify-result" class="hint"></p>' +
           "</form></div>" +
           '<div class="panel">' +
+          "<h3>Environment variables</h3>" +
+          '<p class="hint">Keys: <span class="mono">^[A-Z_][A-Z0-9_]*$</span>. Values are written to <span class="mono">.env</span> on deploy. Compose services must reference <span class="mono">env_file: .env</span>.</p>' +
+          '<div class="field"><label for="envvars-env">Environment</label><select id="envvars-env">' +
+          environments.map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + " (" + escapeHtml(e.slug) + ")</option>").join("") +
+          "</select></div>" +
+          '<div id="envvars-list"></div>' +
+          '<form id="envvar-form" style="margin-top:1rem">' +
+          '<div class="field-row">' +
+          '<div class="field"><label for="envvar-key">Key</label><input type="text" id="envvar-key" required pattern="[A-Z_][A-Z0-9_]*" placeholder="DATABASE_URL"></div>' +
+          '<div class="field"><label for="envvar-value">Value</label><input type="text" id="envvar-value" required></div>' +
+          "</div>" +
+          '<div class="actions"><button type="submit" class="primary inline">Save variable</button></div>' +
+          "</form></div>" +
+          '<div class="panel">' +
           "<h3>Add environment</h3>" +
           '<form id="env-form">' +
           '<div class="field-row">' +
@@ -353,6 +393,104 @@
           document.getElementById("domain-form").addEventListener("submit", addDomain);
           document.getElementById("verify-domain").addEventListener("click", verifyDomain);
           loadDomainsForEnv(Number(domainsEnvSelect.value));
+        }
+
+        const envVarsSelect = document.getElementById("envvars-env");
+        if (envVarsSelect) {
+          const defaultId = defaultEnvId();
+          if (defaultId) envVarsSelect.value = String(defaultId);
+          envVarsSelect.addEventListener("change", () => loadEnvVarsForEnv(Number(envVarsSelect.value)));
+          document.getElementById("envvar-form").addEventListener("submit", saveEnvVar);
+          loadEnvVarsForEnv(Number(envVarsSelect.value));
+        }
+      }
+
+      async function loadEnvVarsForEnv(envId) {
+        envVarsEnvId = envId;
+        envVars = [];
+        const listEl = document.getElementById("envvars-list");
+        if (!listEl) return;
+        if (!envId) {
+          listEl.innerHTML = '<p class="muted">Create an environment first.</p>';
+          return;
+        }
+        listEl.innerHTML = '<p class="muted">Loading variables…</p>';
+        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/env-vars");
+        if (envVarsEnvId !== envId) return;
+        if (!res.ok) {
+          listEl.innerHTML = '<p class="error">' + escapeHtml((data && data.error) || "Could not load variables") + "</p>";
+          return;
+        }
+        envVars = (data && data.envVars) || [];
+        renderEnvVarsList();
+      }
+
+      function renderEnvVarsList() {
+        const listEl = document.getElementById("envvars-list");
+        if (!listEl) return;
+
+        if (!envVars.length) {
+          listEl.innerHTML = '<p class="muted">No variables configured.</p>';
+          return;
+        }
+
+        let table =
+          '<div class="table-wrap"><table><thead><tr>' +
+          "<th>Key</th><th>Value</th><th></th>" +
+          "</tr></thead><tbody>";
+        for (const v of envVars) {
+          table +=
+            "<tr>" +
+            '<td class="mono">' + escapeHtml(v.key) + "</td>" +
+            '<td class="mono">' + escapeHtml(maskEnvValue(v.value)) + "</td>" +
+            '<td><button type="button" class="danger inline delete-envvar" data-id="' + v.id + '">Remove</button></td>' +
+            "</tr>";
+        }
+        table += "</tbody></table></div>";
+        listEl.innerHTML = table;
+
+        listEl.querySelectorAll(".delete-envvar").forEach((btn) => {
+          btn.addEventListener("click", () => deleteEnvVar(Number(btn.dataset.id)));
+        });
+      }
+
+      function maskEnvValue(value) {
+        if (!value) return "";
+        if (value.length <= 4) return "••••";
+        return value.slice(0, 2) + "••••" + value.slice(-2);
+      }
+
+      async function saveEnvVar(ev) {
+        ev.preventDefault();
+        hideError();
+        const envId = Number(document.getElementById("envvars-env").value);
+        const key = document.getElementById("envvar-key").value.trim();
+        const value = document.getElementById("envvar-value").value;
+        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/env-vars", {
+          method: "POST",
+          body: JSON.stringify({ key: key, value: value }),
+        });
+        if (res.ok) {
+          document.getElementById("envvar-key").value = "";
+          document.getElementById("envvar-value").value = "";
+          await loadEnvVarsForEnv(envId);
+        } else {
+          showError((data && data.error) || "Could not save variable");
+        }
+      }
+
+      async function deleteEnvVar(varId) {
+        if (!confirm("Remove this variable?")) return;
+        hideError();
+        const envId = Number(document.getElementById("envvars-env").value);
+        const { res, data } = await apiJson(
+          "/projects/" + projectId + "/environments/" + envId + "/env-vars/" + varId,
+          { method: "DELETE" }
+        );
+        if (res.ok) {
+          await loadEnvVarsForEnv(envId);
+        } else {
+          showError((data && data.error) || "Could not remove variable");
         }
       }
 

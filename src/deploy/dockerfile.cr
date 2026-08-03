@@ -57,6 +57,15 @@ module Yozgat
                          generated
                        end
 
+        env_file_path = File.join(deploy_dir, ".env")
+        has_env_vars = EnvVars.write_file!(ctx.project_id, ctx.environment_id, env_file_path)
+        if has_env_vars
+          Logs.write_line(log_path, "wrote environment file")
+          if user_compose && !EnvVars.compose_references_dotenv?(compose_path)
+            Logs.write_line(log_path, "warning: environment variables were written to .env but compose does not reference env_file: .env")
+          end
+        end
+
         if port_only && old_deploy_dir && old_deploy_dir != deploy_dir
           Logs.write_line(log_path, "port-only redeploy: stopping previous deployment before start")
           stop_previous!(ctx, old_deploy_dir, log_path)
@@ -65,13 +74,13 @@ module Yozgat
         DB::Deployments.update_status!(ctx.deployment_id, "building")
         Logs.write_line(log_path, "building and starting containers")
 
-        unless Docker.compose_up(base, deploy_dir, compose_path, log_path, build: true)
-          Docker.compose_down(base, deploy_dir, compose_path)
+        unless Docker.compose_up(base, deploy_dir, compose_path, log_path, build: true, use_env_file: has_env_vars)
+          Docker.compose_down(base, deploy_dir, compose_path, use_env_file: has_env_vars)
           raise "docker compose up failed"
         end
 
-        unless Docker.wait_for_compose_services(base, deploy_dir, compose_path)
-          Docker.compose_down(base, deploy_dir, compose_path)
+        unless Docker.wait_for_compose_services(base, deploy_dir, compose_path, use_env_file: has_env_vars)
+          Docker.compose_down(base, deploy_dir, compose_path, use_env_file: has_env_vars)
           raise "Your app did not start within 60 seconds. Check the app logs below."
         end
 

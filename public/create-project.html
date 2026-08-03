@@ -14,6 +14,7 @@
       </div>
       <nav>
         <a href="/index.html">← Projects</a>
+        <a href="/map.html">Map</a>
       </nav>
       <div class="topbar-right">
         <span class="user-chip" id="user-chip">…</span>
@@ -53,10 +54,10 @@
             <label for="projectType">Project type</label>
             <select id="projectType">
               <option value="static">Static site</option>
-              <option value="dockerfile" disabled>Dockerfile (coming soon)</option>
-              <option value="dockercompose" disabled>Docker Compose (coming soon)</option>
+              <option value="dockerfile">Dockerfile</option>
+              <option value="dockercompose">Docker Compose</option>
             </select>
-            <p class="hint">Static deploy is available for testing. Other types arrive in later phases.</p>
+            <p class="hint">Static sites, Dockerfile builds, and Compose stacks are supported.</p>
           </div>
           <div class="actions">
             <button type="submit" class="primary inline" id="submit">Create project</button>
