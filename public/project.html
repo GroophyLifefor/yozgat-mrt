@@ -128,6 +128,11 @@
 
       function renderOverview() {
         const panel = document.getElementById("panel-overview");
+        const envSlug = defaultEnvSlug();
+        const webhookUrl =
+          location.origin + "/projects/" + projectId + "/environments/" + encodeURIComponent(envSlug) + "/deploy";
+        const workflow = githubActionsYaml(envSlug);
+
         panel.innerHTML =
           '<div class="panel">' +
           '<dl class="meta-grid">' +
@@ -135,13 +140,76 @@
           "<dt>Repository</dt><dd class=\"mono\">" + escapeHtml(project.repoUrl) + "</dd>" +
           "<dt>Private repo</dt><dd>" + (project.hasPrivateCredentials ? "yes" : "no") + "</dd>" +
           "<dt>Created</dt><dd>" + escapeHtml(formatDate(project.createdAt)) + "</dd>" +
-          "<dt>Webhook secret</dt><dd class=\"mono\">" + escapeHtml(project.webhookSecret) + "</dd>" +
           "</dl>" +
           '<div class="actions">' +
           '<button type="button" class="danger inline" id="delete-project">Delete project</button>' +
-          "</div></div>";
+          "</div></div>" +
+          '<div class="panel">' +
+          "<h3>Continuous deployment</h3>" +
+          '<p class="hint">Sign the JSON body with HMAC SHA-256 using the webhook secret. GitHub Actions and other CI can POST to this URL.</p>' +
+          '<div class="field"><label>Webhook URL</label>' +
+          '<div class="secret-row"><code class="secret-value" id="webhook-url">' + escapeHtml(webhookUrl) + "</code>" +
+          '<button type="button" class="secondary inline" id="copy-webhook-url">Copy URL</button></div></div>' +
+          '<div class="field"><label>Webhook secret</label>' +
+          '<div class="secret-row"><code class="secret-value" id="webhook-secret">' + escapeHtml(project.webhookSecret) + "</code>" +
+          '<button type="button" class="secondary inline" id="copy-webhook-secret">Copy secret</button></div></div>' +
+          '<div class="field"><label>Environment slug</label>' +
+          '<p class="hint mono" id="webhook-env-slug">' + escapeHtml(envSlug) + " (change slug in the URL for other environments)</p></div>" +
+          "<h3 style=\"margin-top:1.25rem\">GitHub Actions</h3>" +
+          '<p class="hint">Add <span class="mono">.github/workflows/yozgat-deploy.yml</span> to your repository.</p>' +
+          '<pre class="code-block" id="workflow-yaml">' + escapeHtml(workflow) + "</pre>" +
+          '<div class="actions"><button type="button" class="secondary inline" id="copy-workflow">Copy workflow</button></div>' +
+          '<dl class="meta-grid" style="margin-top:1rem">' +
+          "<dt>Secret</dt><dd><span class=\"mono\">YOZGAT_URL</span> — " + escapeHtml(location.origin) + "</dd>" +
+          "<dt>Secret</dt><dd><span class=\"mono\">YOZGAT_WEBHOOK_SECRET</span> — copy from above</dd>" +
+          "<dt>Variable</dt><dd><span class=\"mono\">YOZGAT_PROJECT_ID</span> — " + projectId + "</dd>" +
+          "<dt>Variable</dt><dd><span class=\"mono\">YOZGAT_ENV_SLUG</span> — " + escapeHtml(envSlug) + "</dd>" +
+          "</dl></div>";
 
         document.getElementById("delete-project").addEventListener("click", deleteProject);
+        document.getElementById("copy-webhook-url").addEventListener("click", (e) => {
+          copyText(document.getElementById("webhook-url").textContent, e.target);
+        });
+        document.getElementById("copy-webhook-secret").addEventListener("click", (e) => {
+          copyText(project.webhookSecret, e.target);
+        });
+        document.getElementById("copy-workflow").addEventListener("click", (e) => {
+          copyText(workflow, e.target);
+        });
+      }
+
+      function defaultEnvSlug() {
+        if (!environments.length) return "prod";
+        const prod = environments.find((e) => e.slug === "prod");
+        return prod ? prod.slug : environments[0].slug;
+      }
+
+      function githubActionsYaml(envSlug) {
+        return (
+          "name: Deploy to Yozgat\n\n" +
+          "on:\n" +
+          "  push:\n" +
+          "    branches: [main]\n\n" +
+          "jobs:\n" +
+          "  deploy:\n" +
+          "    runs-on: ubuntu-latest\n" +
+          "    steps:\n" +
+          "      - uses: actions/checkout@v4\n\n" +
+          "      - name: Deploy\n" +
+          "        env:\n" +
+          "          YOZGAT_URL: ${{ secrets.YOZGAT_URL }}\n" +
+          "          WEBHOOK_SECRET: ${{ secrets.YOZGAT_WEBHOOK_SECRET }}\n" +
+          "          PROJECT_ID: ${{ vars.YOZGAT_PROJECT_ID }}\n" +
+          "          ENV_SLUG: ${{ vars.YOZGAT_ENV_SLUG }}\n" +
+          "        run: |\n" +
+          "          ENV_SLUG=\"${ENV_SLUG:-" + envSlug + "}\"\n" +
+          "          PAYLOAD='{\"commitHash\":\"${{ github.sha }}\"}'\n" +
+          "          SIGNATURE=$(printf '%s' \"$PAYLOAD\" | openssl dgst -sha256 -hmac \"$WEBHOOK_SECRET\" | awk '{print $2}')\n" +
+          "          curl -sS -f -X POST \"${YOZGAT_URL}/projects/${PROJECT_ID}/environments/${ENV_SLUG}/deploy\" \\\n" +
+          "            -H \"Content-Type: application/json\" \\\n" +
+          "            -H \"X-Hub-Signature-256: sha256=${SIGNATURE}\" \\\n" +
+          "            -d \"$PAYLOAD\""
+        );
       }
 
       function renderEnvironments() {

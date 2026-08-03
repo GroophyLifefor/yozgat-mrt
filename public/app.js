@@ -154,3 +154,20 @@ function mountTopbar(user) {
   const logoutBtn = document.getElementById("logout");
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
 }
+
+async function copyText(text, button) {
+  if (!text) return false;
+  try {
+    await navigator.clipboard.writeText(text);
+    if (button) {
+      const prev = button.textContent;
+      button.textContent = "Copied";
+      setTimeout(() => {
+        button.textContent = prev;
+      }, 1500);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}

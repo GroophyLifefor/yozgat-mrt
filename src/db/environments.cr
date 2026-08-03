@@ -52,6 +52,16 @@ module Yozgat
         ) { |rs| read_row(rs) }
       end
 
+      def self.find_id_by_slug(project_id : Int64, slug : String) : Int64?
+        return nil unless slug_ok?(slug)
+
+        Yozgat::DB.database.query_one?(
+          "SELECT id FROM environments WHERE project_id = ?1 AND slug = ?2",
+          project_id, slug,
+          as: Int64,
+        )
+      end
+
       def self.create(project_id : Int64, name : String, slug : String) : Row
         Yozgat::DB.database.exec(
           "INSERT INTO environments (project_id, name, slug) VALUES (?1, ?2, ?3)",

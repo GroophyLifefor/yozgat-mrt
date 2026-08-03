@@ -142,6 +142,14 @@ module Yozgat
         Random::Secure.hex(32)
       end
 
+      def self.fetch_webhook_secret(project_id : Int64) : String?
+        Yozgat::DB.database.query_one?(
+          "SELECT webhook_secret FROM projects WHERE id = ?1",
+          project_id,
+          as: String,
+        )
+      end
+
       private def self.read_list_row(rs : ::DB::ResultSet) : ListRow
         {
           id:                      rs.read(Int64),

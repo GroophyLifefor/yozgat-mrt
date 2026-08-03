@@ -391,6 +391,37 @@ textarea {
 .meta-grid dt { color: var(--muted); }
 .meta-grid dd { margin: 0; }
 
+.secret-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  align-items: center;
+}
+
+.secret-value {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .82rem;
+  word-break: break-all;
+}
+
+.code-block {
+  background: #242824;
+  color: #e6e7e5;
+  padding: 1rem;
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .78rem;
+  overflow: auto;
+  white-space: pre;
+  margin: 0;
+}
+
 .live-url {
   display: inline-flex;
   align-items: center;
