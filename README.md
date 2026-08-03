@@ -43,7 +43,7 @@ shards install
 ```
 
 ```bash
-just build     # Windows: uses absolute LIBPATHs, Linux: -Llibata -Llibsqlite
+just build     # Windows: vendor/libata/win-x64, Linux: vendor/libata/linux-x64
 ```
 
 Or manually (note: use **absolute** LIBPATHs — the compiler resolves them in the
@@ -52,18 +52,18 @@ link phase):
 ```powershell
 # PowerShell
 $root = (Get-Location).Path
-crystal build src/main.cr -o bin/yozgat.exe --link-flags "/LIBPATH:$root\libata /LIBPATH:$root\libsqlite"
+crystal build src/main.cr -o bin/yozgat.exe --link-flags "/LIBPATH:$root/vendor/libata/win-x64 /LIBPATH:$root/libsqlite"
 ```
 
 ```bash
 # Linux
-crystal build src/main.cr -o bin/yozgat --link-flags "-Llibata -Llibsqlite"
+crystal build src/main.cr -o bin/yozgat --link-flags "-Lvendor/libata/linux-x64 -Llibsqlite"
 ```
 
 Run (DLLs must be findable at runtime):
 
 ```powershell
-$env:PATH = "$PWD\libata;$PWD\libsqlite;$env:PATH"
+$env:PATH = "$PWD/vendor/libata/win-x64;$PWD/libsqlite;$env:PATH"
 .\bin\yozgat.exe      # or: just run
 ```
 

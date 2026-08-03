@@ -1,7 +1,9 @@
 /lib/
-/libata/
 /libsqlite/
 /bin/
 /data/
 /.shards/
 *.dwarf
+
+# Legacy local libata (use vendor/libata/win-x64 instead)
+/libata/

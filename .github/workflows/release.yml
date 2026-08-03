@@ -25,36 +25,29 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libsqlite3-dev patchelf
+          sudo apt-get install -y libsqlite3-dev
+
+      - name: Verify libata vendor bundle
+        run: |
+          lib_dir="${GITHUB_WORKSPACE}/vendor/libata/linux-x64"
+          test -f "${lib_dir}/libata.so" || { echo "missing ${lib_dir}/libata.so — commit the linux vendor bundle"; exit 1; }
+          test -f "${lib_dir}/MANIFEST" || { echo "missing ${lib_dir}/MANIFEST"; exit 1; }
+
+      - name: Cache shards
+        uses: actions/cache@v5
+        with:
+          path: lib
+          key: shards-${{ hashFiles('shard.yml', 'shard.lock') }}
+          restore-keys: |
+            shards-
 
       - name: Install shards
         run: shards install
 
-      - name: Resolve ata-validator source commit
-        id: ata-src
-        run: |
-          SHA=$(git ls-remote https://github.com/ata-core/ata-validator.git HEAD | cut -f1)
-          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
-
-      - name: Cache libata build
-        id: libata-cache
-        uses: actions/cache@v5
-        with:
-          path: lib/ata-validator-crystal/libata
-          key: libata-bundle-v2-${{ steps.ata-src.outputs.sha }}
-          restore-keys: |
-            libata-bundle-v2-
-            libata-bundle-
-
-      - name: Prepare libata bundle
-        env:
-          ATA_VALIDATOR_SRC: /tmp/ata-validator
-        run: bash scripts/ci/prepare-libata.sh
-
       - name: Build release binary
         run: |
           mkdir -p bin
-          lib_dir="${GITHUB_WORKSPACE}/lib/ata-validator-crystal/libata"
+          lib_dir="${GITHUB_WORKSPACE}/vendor/libata/linux-x64"
           crystal build src/main.cr --release --no-debug \
             -o bin/yozgat \
             --link-flags "-L${lib_dir} -lata -Wl,-rpath-link,${lib_dir}"
@@ -63,7 +56,7 @@ jobs:
         shell: bash
         run: |
           bundle_dir="yozgat-x86_64-linux-gnu"
-          lib_dir="${GITHUB_WORKSPACE}/lib/ata-validator-crystal/libata"
+          lib_dir="${GITHUB_WORKSPACE}/vendor/libata/linux-x64"
           mkdir -p "${bundle_dir}/public"
           cp bin/yozgat "${bundle_dir}/"
           cp -P "${lib_dir}"/*.so* "${bundle_dir}/"
