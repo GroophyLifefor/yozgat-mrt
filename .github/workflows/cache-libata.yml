@@ -43,8 +43,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: lib/ata-validator-crystal/libata
-          key: libata-bundle-${{ steps.ata-src.outputs.sha }}
+          key: libata-bundle-v2-${{ steps.ata-src.outputs.sha }}
           restore-keys: |
+            libata-bundle-v2-
             libata-bundle-
 
       - name: Prepare libata bundle

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Build libata.so and copy its transitive shared libs into libata/.
-# Cached artifacts must include libata.so + libre2.so* + libsimdjson.so*
-# so release jobs can link without /tmp/ata-validator/build-shared present.
+# Build libata.so and copy all shared libs from the CMake build tree into libata/.
+# Release jobs link against this folder without /tmp/ata-validator/build-shared.
 set -euo pipefail
 
 ROOT="${GITHUB_WORKSPACE:-$(cd "$(dirname "$0")/../.." && pwd)}"
@@ -13,15 +12,23 @@ libata_complete() {
   [[ -f "$LIB_DIR/libata.so" ]] || return 1
   compgen -G "$LIB_DIR/libre2.so*" >/dev/null || return 1
   compgen -G "$LIB_DIR/libsimdjson.so*" >/dev/null || return 1
+
+  local re2
+  re2=$(compgen -G "$LIB_DIR/libre2.so*" | head -n1 || true)
+  [[ -n "$re2" ]] || return 1
+
+  if ldd "$re2" 2>/dev/null | grep -q 'not found'; then
+    return 1
+  fi
+
+  true
 }
 
 copy_transitive_libs() {
   mkdir -p "$LIB_DIR"
-  for name in libre2 libsimdjson; do
-    while IFS= read -r -d '' artifact; do
-      cp -P "$artifact" "$LIB_DIR/"
-    done < <(find "$BUILD_DIR" -name "${name}.so*" -print0)
-  done
+  while IFS= read -r -d '' artifact; do
+    cp -P "$artifact" "$LIB_DIR/"
+  done < <(find "$BUILD_DIR" -name '*.so*' -print0)
 }
 
 build_libata() {

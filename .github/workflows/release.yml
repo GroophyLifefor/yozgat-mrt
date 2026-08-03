@@ -41,8 +41,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: lib/ata-validator-crystal/libata
-          key: libata-bundle-${{ steps.ata-src.outputs.sha }}
+          key: libata-bundle-v2-${{ steps.ata-src.outputs.sha }}
           restore-keys: |
+            libata-bundle-v2-
             libata-bundle-
 
       - name: Prepare libata bundle
@@ -65,7 +66,7 @@ jobs:
           lib_dir="${GITHUB_WORKSPACE}/lib/ata-validator-crystal/libata"
           mkdir -p "${bundle_dir}/public"
           cp bin/yozgat "${bundle_dir}/"
-          cp -P "${lib_dir}"/libata.so "${lib_dir}"/libre2.so* "${lib_dir}"/libsimdjson.so* "${bundle_dir}/"
+          cp -P "${lib_dir}"/*.so* "${bundle_dir}/"
           cp -r public/. "${bundle_dir}/public/"
           tar -czf "yozgat-x86_64-linux-gnu.tar.gz" -C "${bundle_dir}" .
 
