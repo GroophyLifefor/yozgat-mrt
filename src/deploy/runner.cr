@@ -21,6 +21,8 @@ module Yozgat
         Static.execute!(ctx)
       when "dockerfile"
         Dockerfile.execute!(ctx)
+      when "dockercompose"
+        Compose.execute!(ctx)
       else
         raise "unsupported project type for deployment"
       end

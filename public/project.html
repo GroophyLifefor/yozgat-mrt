@@ -333,7 +333,11 @@
       }
 
       function canDeploy() {
-        return project.projectType === "static" || project.projectType === "dockerfile";
+        return (
+          project.projectType === "static" ||
+          project.projectType === "dockerfile" ||
+          project.projectType === "dockercompose"
+        );
       }
 
       function renderDeploy() {
@@ -349,7 +353,7 @@
           "<h3>Deploy</h3>" +
           (canDeploy()
             ? ""
-            : '<p class="hint error">Project type "' + escapeHtml(project.projectType) + '" is not supported yet. Static and Dockerfile projects can be deployed.</p>') +
+            : '<p class="hint error">Project type "' + escapeHtml(project.projectType) + '" is not supported yet. Static, Dockerfile, and Compose projects can be deployed.</p>') +
           '<div class="field"><label for="deploy-env">Environment</label><select id="deploy-env">' + envOptions + "</select></div>" +
           '<div class="field-row">' +
           '<div class="field"><label for="deploy-branch">Branch</label><select id="deploy-branch" disabled><option>Loading branches…</option></select></div>' +
