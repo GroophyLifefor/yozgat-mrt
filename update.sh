@@ -265,7 +265,12 @@ fi
 # ── Install new release ──────────────────────
 info "Installing ${LATEST_TAG}..."
 install -m 755 "$TMP_EXTRACT/yozgat" "$INSTALL_BIN"
-install -m 644 "$TMP_EXTRACT/libata.so" "$LIBATA"
+shopt -s nullglob
+native_libs=("$TMP_EXTRACT"/*.so*)
+shopt -u nullglob
+for lib in "${native_libs[@]}"; do
+  install -m 644 "$lib" "$INSTALL_LIB/"
+done
 rm -rf "$PUBLIC_DIR"
 mkdir -p "$PUBLIC_DIR"
 cp -a "$TMP_EXTRACT/public/." "$PUBLIC_DIR/"

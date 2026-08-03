@@ -231,9 +231,14 @@ tar -xzf "$TMP_ARCHIVE" -C "$TMP_EXTRACT" || error "Failed to extract release bu
 info "Installing binary to $INSTALL_BIN..."
 install -m 755 "$TMP_EXTRACT/yozgat" "$INSTALL_BIN"
 
-info "Installing native library and public assets..."
+info "Installing native libraries and public assets..."
 mkdir -p "$INSTALL_LIB"
-install -m 644 "$TMP_EXTRACT/libata.so" "$LIBATA"
+shopt -s nullglob
+native_libs=("$TMP_EXTRACT"/*.so*)
+shopt -u nullglob
+for lib in "${native_libs[@]}"; do
+  install -m 644 "$lib" "$INSTALL_LIB/"
+done
 rm -rf "$PUBLIC_DIR"
 mkdir -p "$PUBLIC_DIR"
 cp -a "$TMP_EXTRACT/public/." "$PUBLIC_DIR/"

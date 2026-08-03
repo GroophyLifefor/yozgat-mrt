@@ -25,7 +25,7 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake g++ libsqlite3-dev
+          sudo apt-get install -y cmake g++ libsqlite3-dev patchelf
 
       - name: Install shards
         run: shards install
@@ -41,40 +41,31 @@ jobs:
         uses: actions/cache@v5
         with:
           path: lib/ata-validator-crystal/libata
-          key: libata-${{ steps.ata-src.outputs.sha }}
+          key: libata-bundle-${{ steps.ata-src.outputs.sha }}
           restore-keys: |
-            libata-
+            libata-bundle-
 
-      - name: Clone ata-validator source
-        if: steps.libata-cache.outputs.cache-hit != 'true'
-        run: git clone --depth 1 https://github.com/ata-core/ata-validator.git /tmp/ata-validator
-
-      - name: Build libata.so
-        if: steps.libata-cache.outputs.cache-hit != 'true'
-        working-directory: lib/ata-validator-crystal
+      - name: Prepare libata bundle
         env:
           ATA_VALIDATOR_SRC: /tmp/ata-validator
-        run: |
-          # ata-validator's CMake only honors BUILD_SHARED_LIBS (add_library
-          # without an explicit type); ATA_SHARED is ignored and produces a
-          # static libata.a instead of libata.so.
-          sed -i 's/-DATA_SHARED=ON/-DBUILD_SHARED_LIBS=ON/' scripts/build_native.cr
-          crystal run scripts/build_native.cr
+        run: bash scripts/ci/prepare-libata.sh
 
       - name: Build release binary
         run: |
           mkdir -p bin
+          lib_dir="${GITHUB_WORKSPACE}/lib/ata-validator-crystal/libata"
           crystal build src/main.cr --release --no-debug \
             -o bin/yozgat \
-            --link-flags "-L${GITHUB_WORKSPACE}/lib/ata-validator-crystal/libata -lata"
+            --link-flags "-L${lib_dir} -lata -Wl,-rpath-link,${lib_dir}"
 
       - name: Package release bundle
         shell: bash
         run: |
           bundle_dir="yozgat-x86_64-linux-gnu"
+          lib_dir="${GITHUB_WORKSPACE}/lib/ata-validator-crystal/libata"
           mkdir -p "${bundle_dir}/public"
           cp bin/yozgat "${bundle_dir}/"
-          cp lib/ata-validator-crystal/libata/libata.so "${bundle_dir}/"
+          cp -P "${lib_dir}"/libata.so "${lib_dir}"/libre2.so* "${lib_dir}"/libsimdjson.so* "${bundle_dir}/"
           cp -r public/. "${bundle_dir}/public/"
           tar -czf "yozgat-x86_64-linux-gnu.tar.gz" -C "${bundle_dir}" .
 
