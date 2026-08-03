@@ -42,12 +42,13 @@
   class YozgatMap {
     constructor(root) {
       this.root = root;
-      this.viewport = root.querySelector(".map-viewport");
-      this.edgesSvg = root.querySelector(".map-edges");
-      this.nodesLayer = root.querySelector(".map-nodes");
-      this.minimap = root.querySelector(".map-minimap");
-      this.emptyEl = root.querySelector(".map-empty");
-      this.loadingEl = root.querySelector(".map-loading");
+      const wrap = root.closest(".map-viewport-wrap") || root;
+      this.viewport = root.classList.contains("map-viewport") ? root : root.querySelector(".map-viewport");
+      this.edgesSvg = this.viewport.querySelector(".map-edges");
+      this.nodesLayer = this.viewport.querySelector(".map-nodes");
+      this.minimap = wrap.querySelector(".map-minimap");
+      this.emptyEl = wrap.querySelector(".map-empty");
+      this.loadingEl = wrap.querySelector(".map-loading");
 
       this.nodes = [];
       this.edges = [];
