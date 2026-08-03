@@ -35,6 +35,7 @@
       let pollTimer = null;
       let activeDeployment = null;
       let resolvedCommit = null;
+      let deployments = [];
 
       (async function () {
         if (!projectId) {
@@ -53,9 +54,10 @@
       })();
 
       async function loadAll() {
-        const [{ res: pRes, data: pData }, { res: eRes, data: eData }] = await Promise.all([
+        const [{ res: pRes, data: pData }, { res: eRes, data: eData }, { res: dRes, data: dData }] = await Promise.all([
           apiJson("/projects/" + projectId),
           apiJson("/projects/" + projectId + "/environments"),
+          apiJson("/projects/" + projectId + "/deployments"),
         ]);
 
         if (!pRes.ok) {
@@ -65,7 +67,16 @@
 
         project = pData.project;
         environments = (eData && eData.environments) || [];
+        deployments = (dRes.ok && dData && dData.deployments) ? dData.deployments : [];
         render();
+      }
+
+      async function refreshDeployments() {
+        const { res, data } = await apiJson("/projects/" + projectId + "/deployments");
+        if (!res.ok || !data || !Array.isArray(data.deployments)) return;
+        deployments = data.deployments;
+        const panel = document.getElementById("panel-deployments");
+        if (panel) renderDeployments();
       }
 
       function renderError(msg) {
@@ -87,10 +98,12 @@
           '<div class="tabs" role="tablist">' +
           '<button type="button" class="tab active" data-tab="overview">Overview</button>' +
           '<button type="button" class="tab" data-tab="environments">Environments</button>' +
+          '<button type="button" class="tab" data-tab="deployments">Deployments</button>' +
           '<button type="button" class="tab" data-tab="deploy">Deploy</button>' +
           "</div>" +
           '<div id="panel-overview" class="tab-panel active"></div>' +
           '<div id="panel-environments" class="tab-panel"></div>' +
+          '<div id="panel-deployments" class="tab-panel"></div>' +
           '<div id="panel-deploy" class="tab-panel"></div>';
 
         main.querySelectorAll(".tab").forEach((btn) => {
@@ -99,6 +112,7 @@
 
         renderOverview();
         renderEnvironments();
+        renderDeployments();
         renderDeploy();
         updateLiveBanner();
       }
@@ -186,6 +200,68 @@
         panel.querySelectorAll(".edit-port").forEach((btn) => {
           btn.addEventListener("click", () => editHostPort(Number(btn.dataset.id), btn.dataset.port));
         });
+      }
+
+      function renderDeployments() {
+        const panel = document.getElementById("panel-deployments");
+        if (!panel) return;
+
+        let table = "";
+        if (deployments.length) {
+          table =
+            '<div class="table-wrap"><table><thead><tr>' +
+            "<th>#</th><th>Environment</th><th>Commit</th><th>Status</th><th>Port</th><th>Created</th><th></th>" +
+            "</tr></thead><tbody>";
+          for (const d of deployments) {
+            table +=
+              "<tr>" +
+              "<td>" + d.id + "</td>" +
+              "<td>" + escapeHtml(d.environmentName) + ' <span class="mono muted">' + escapeHtml(d.environmentSlug) + "</span></td>" +
+              '<td class="mono">' + escapeHtml((d.commitHash || "").slice(0, 7)) + "</td>" +
+              '<td><span class="status-pill ' + statusClass(d.status) + '">' + escapeHtml(d.status) + "</span></td>" +
+              "<td>" + (d.assignedPort != null ? d.assignedPort : "—") + "</td>" +
+              "<td>" + escapeHtml(formatDate(d.createdAt)) + "</td>" +
+              '<td><button type="button" class="secondary inline view-logs" data-id="' + d.id + '">Logs</button></td>' +
+              "</tr>";
+          }
+          table += "</tbody></table></div>";
+        } else {
+          table = '<p class="muted">No deployments yet.</p>';
+        }
+
+        panel.innerHTML =
+          '<div class="panel">' +
+          "<h3>Deployment history</h3>" +
+          table +
+          '<div class="actions" style="margin-top:1rem">' +
+          '<button type="button" class="secondary inline" id="refresh-deployments">Refresh</button>' +
+          "</div></div>";
+
+        panel.querySelectorAll(".view-logs").forEach((btn) => {
+          btn.addEventListener("click", () => viewDeploymentLogs(Number(btn.dataset.id)));
+        });
+        document.getElementById("refresh-deployments").addEventListener("click", refreshDeployments);
+      }
+
+      function viewDeploymentLogs(deploymentId) {
+        const d = deployments.find((x) => x.id === deploymentId);
+        if (!d) return;
+
+        activeDeployment = {
+          id: d.id,
+          environmentId: d.environmentId,
+          commitHash: d.commitHash,
+          status: d.status,
+          assignedPort: d.assignedPort,
+        };
+
+        switchTab("deploy");
+        const logsPanel = document.getElementById("logs-panel");
+        if (logsPanel) logsPanel.style.display = "block";
+        const statusEl = document.getElementById("deploy-status");
+        if (statusEl) statusEl.textContent = "Deployment #" + d.id + " · " + d.status;
+        updateLiveBanner();
+        startPolling();
       }
 
       function renderDeploy() {
@@ -371,6 +447,18 @@
         }
 
         activeDeployment = data.deployment;
+        deployments.unshift({
+          id: data.deployment.id,
+          environmentId: data.deployment.environmentId,
+          environmentSlug: environments.find((e) => e.id === envId)?.slug || "",
+          environmentName: environments.find((e) => e.id === envId)?.name || "",
+          commitHash: data.deployment.commitHash,
+          status: data.deployment.status,
+          assignedPort: data.deployment.assignedPort,
+          createdAt: data.deployment.createdAt,
+        });
+        renderDeployments();
+        switchTab("deploy");
         document.getElementById("logs-panel").style.display = "block";
         document.getElementById("deploy-status").textContent =
           "Deployment #" + activeDeployment.id + " · " + activeDeployment.status;
@@ -406,6 +494,7 @@
         if (logs.status === "running" || logs.status === "failed") {
           clearInterval(pollTimer);
           pollTimer = null;
+          refreshDeployments();
           if (logs.status === "running") {
             const fresh = await apiJson("/projects/" + projectId);
             if (fresh.res.ok && fresh.data && fresh.data.project) {

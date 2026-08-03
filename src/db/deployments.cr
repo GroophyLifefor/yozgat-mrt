@@ -49,6 +49,56 @@ module Yozgat
         ) { |rs| read_row(rs) }
       end
 
+      alias ProjectListRow = NamedTuple(
+        id: Int64,
+        projectId: Int64,
+        environmentId: Int64,
+        environmentSlug: String,
+        environmentName: String,
+        commitHash: String,
+        status: String,
+        deploymentSlug: String?,
+        assignedPort: Int64?,
+        imageTag: String?,
+        createdAt: String,
+      )
+
+      def self.list_for_environment(project_id : Int64, env_id : Int64) : Array(Row)?
+        return nil unless environment_belongs?(project_id, env_id)
+
+        rows = [] of Row
+        Yozgat::DB.database.query(
+          "SELECT id, project_id, environment_id, commit_hash, status, deployment_slug,
+                  assigned_port, image_tag, created_at
+           FROM deployments
+           WHERE project_id = ?1 AND environment_id = ?2
+           ORDER BY id DESC",
+          project_id, env_id,
+        ) do |rs|
+          rs.each { rows << read_row(rs) }
+        end
+        rows
+      end
+
+      def self.list_for_project(project_id : Int64) : Array(ProjectListRow)?
+        return nil unless Yozgat::DB::Environments.project_exists?(project_id)
+
+        rows = [] of ProjectListRow
+        Yozgat::DB.database.query(
+          "SELECT d.id, d.project_id, d.environment_id, e.slug, e.name,
+                  d.commit_hash, d.status, d.deployment_slug, d.assigned_port,
+                  d.image_tag, d.created_at
+           FROM deployments d
+           JOIN environments e ON e.id = d.environment_id
+           WHERE d.project_id = ?1
+           ORDER BY d.id DESC",
+          project_id,
+        ) do |rs|
+          rs.each { rows << read_project_list_row(rs) }
+        end
+        rows
+      end
+
       def self.create_record!(project_id : Int64, env_id : Int64, commit_hash : String) : Yozgat::Deploy::Context
         raise ArgumentError.new("environment not found") unless environment_belongs?(project_id, env_id)
 
@@ -177,6 +227,22 @@ module Yozgat
           assignedPort:   rs.read(Int64?),
           imageTag:       rs.read(String?),
           createdAt:      rs.read(String),
+        }
+      end
+
+      private def self.read_project_list_row(rs : ::DB::ResultSet) : ProjectListRow
+        {
+          id:              rs.read(Int64),
+          projectId:       rs.read(Int64),
+          environmentId:   rs.read(Int64),
+          environmentSlug: rs.read(String),
+          environmentName: rs.read(String),
+          commitHash:      rs.read(String),
+          status:          rs.read(String),
+          deploymentSlug:  rs.read(String?),
+          assignedPort:    rs.read(Int64?),
+          imageTag:        rs.read(String?),
+          createdAt:       rs.read(String),
         }
       end
     end
