@@ -332,6 +332,10 @@
         startPolling();
       }
 
+      function canDeploy() {
+        return project.projectType === "static" || project.projectType === "dockerfile";
+      }
+
       function renderDeploy() {
         const panel = document.getElementById("panel-deploy");
         const envOptions = environments
@@ -343,9 +347,9 @@
         panel.innerHTML =
           '<div class="panel">' +
           "<h3>Deploy</h3>" +
-          (project.projectType !== "static"
-            ? '<p class="hint error">Only static projects can be deployed in this build. Type: ' + escapeHtml(project.projectType) + ".</p>"
-            : "") +
+          (canDeploy()
+            ? ""
+            : '<p class="hint error">Project type "' + escapeHtml(project.projectType) + '" is not supported yet. Static and Dockerfile projects can be deployed.</p>') +
           '<div class="field"><label for="deploy-env">Environment</label><select id="deploy-env">' + envOptions + "</select></div>" +
           '<div class="field-row">' +
           '<div class="field"><label for="deploy-branch">Branch</label><select id="deploy-branch" disabled><option>Loading branches…</option></select></div>' +
@@ -436,7 +440,7 @@
           resolvedCommit = data.commitHash;
           commitEl.value = resolvedCommit;
           commitEl.placeholder = "";
-          deployBtn.disabled = project.projectType !== "static";
+          deployBtn.disabled = !canDeploy();
           if (status) {
             status.textContent = data.branch + " @ " + data.commitHash.slice(0, 7);
           }

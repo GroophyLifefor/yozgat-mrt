@@ -19,6 +19,8 @@ module Yozgat
       case DB::Projects.fetch_project_type(ctx.project_id)
       when "static"
         Static.execute!(ctx)
+      when "dockerfile"
+        Dockerfile.execute!(ctx)
       else
         raise "unsupported project type for deployment"
       end

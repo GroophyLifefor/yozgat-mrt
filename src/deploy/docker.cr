@@ -1,9 +1,18 @@
 module Yozgat
   module Deploy
     module Docker
-      def self.compose_up(base_dir : String, project_dir : String, compose_path : String, log_path : String, build : Bool = false) : Bool
+      def self.compose_up(
+        base_dir : String,
+        project_dir : String,
+        compose_path : String,
+        log_path : String,
+        build : Bool = false,
+        use_env_file : Bool = false,
+      ) : Bool
         compose_arg = project_relative_path(project_dir, compose_path)
-        args = ["compose", "-f", compose_arg, "up", "-d"]
+        args = ["compose"]
+        args.concat(["--env-file", ".env"]) if use_env_file
+        args.concat(["-f", compose_arg, "up", "-d"])
         args << "--build" if build
 
         output = IO::Memory.new
@@ -27,16 +36,56 @@ module Yozgat
         end
       end
 
-      def self.compose_down(base_dir : String, project_dir : String, compose_path : String) : Nil
+      def self.compose_down(
+        base_dir : String,
+        project_dir : String,
+        compose_path : String,
+        use_env_file : Bool = false,
+      ) : Nil
         compose_arg = project_relative_path(project_dir, compose_path)
+        args = ["compose"]
+        args.concat(["--env-file", ".env"]) if use_env_file
+        args.concat(["-f", compose_arg, "down"])
+
         Process.run(
           "docker",
-          ["compose", "-f", compose_arg, "down"],
+          args,
           chdir: project_dir,
           env: docker_env(base_dir, project_dir),
           output: Process::Redirect::Close,
           error: Process::Redirect::Close,
         )
+      end
+
+      def self.wait_for_compose_services(
+        base_dir : String,
+        project_dir : String,
+        compose_path : String,
+        use_env_file : Bool = false,
+      ) : Bool
+        compose_arg = project_relative_path(project_dir, compose_path)
+
+        30.times do
+          output = IO::Memory.new
+          args = ["compose"]
+          args.concat(["--env-file", ".env"]) if use_env_file
+          args.concat(["-f", compose_arg, "ps", "--status", "running", "--format", "json"])
+
+          if Process.run(
+               "docker",
+               args,
+               chdir: project_dir,
+               env: docker_env(base_dir, project_dir),
+               output: output,
+               error: Process::Redirect::Close,
+             ).success?
+            return true if output.to_s.lines.any? { |line| !line.strip.empty? }
+          end
+
+          sleep 1.seconds
+        end
+
+        false
       end
 
       def self.wait_for_container_running(base_dir : String, name : String) : Bool
