@@ -168,6 +168,19 @@ module Yozgat
         update_project_status!(project_id, "failed")
       end
 
+      # Syncs the actual published host port (from the compose file) into the
+      # environment and the current deployment so the dashboard URL is correct.
+      def self.sync_host_port!(project_id : Int64, env_id : Int64, deployment_id : Int64, port : Int64) : Nil
+        Yozgat::DB.database.exec(
+          "UPDATE environments SET host_port = ?1 WHERE id = ?2 AND project_id = ?3",
+          port, env_id, project_id,
+        )
+        Yozgat::DB.database.exec(
+          "UPDATE deployments SET assigned_port = ?1 WHERE id = ?2",
+          port, deployment_id,
+        )
+      end
+
       def self.peek_status(deployment_id : Int64) : String?
         Yozgat::DB.database.query_one?(
           "SELECT status FROM deployments WHERE id = ?1",

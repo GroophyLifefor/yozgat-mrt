@@ -47,15 +47,21 @@ module Yozgat
                          validate_compose!(path, has_domains: has_domains, domain_names: domain_names)
                          Logs.write_line(log_path, "compose validation passed")
                          path
-                       else
-                         if has_domains
-                           raise COMPOSE_MISSING_WITH_DOMAINS
-                         end
-                         generated = File.join(deploy_dir, "docker-compose.yml")
-                         Logs.write_line(log_path, "no compose file in repo; generating docker-compose.yml")
-                         File.write(generated, generate_auto_compose(ctx))
-                         generated
-                       end
+                      else
+                        if has_domains
+                          raise COMPOSE_MISSING_WITH_DOMAINS
+                        end
+                        generated = File.join(deploy_dir, "docker-compose.yml")
+                        Logs.write_line(log_path, "no compose file in repo; generating docker-compose.yml")
+                        container_port = detect_expose_port(repo_dir)
+                        if container_port
+                          Logs.write_line(log_path, "detected EXPOSE port #{container_port} from Dockerfile")
+                        else
+                          Logs.write_line(log_path, "no EXPOSE port found in Dockerfile; using default container port 8080")
+                        end
+                        File.write(generated, generate_auto_compose(ctx, repo_dir))
+                        generated
+                      end
 
         env_file_path = File.join(deploy_dir, ".env")
         has_env_vars = EnvVars.write_file!(ctx.project_id, ctx.environment_id, env_file_path)
@@ -90,6 +96,15 @@ module Yozgat
 
         Current.update(env_dir, ctx.deployment_slug)
         Logs.write_line(log_path, "updated current pointer")
+
+        if !has_domains && user_compose
+          if host_port = Compose.detect_host_port(compose_path)
+            if host_port != Yozgat::DB::Environments.fetch_host_port(ctx.project_id, ctx.environment_id)
+              Yozgat::DB::Deployments.sync_host_port!(ctx.project_id, ctx.environment_id, ctx.deployment_id, host_port)
+              Logs.write_line(log_path, "host port set to #{host_port} from compose ports")
+            end
+          end
+        end
 
         if has_domains && old_deploy_dir && old_deploy_dir != deploy_dir
           Logs.write_line(log_path, "stopping previous deployment")
@@ -137,9 +152,24 @@ module Yozgat
         end
       end
 
-      def self.generate_auto_compose(ctx : Context) : String
+      def self.detect_expose_port(repo_dir : String) : Int64?
+        path = File.join(repo_dir, "Dockerfile")
+        return nil unless File.file?(path)
+
+        File.each_line(path) do |line|
+          stripped = line.strip
+          next if stripped.empty? || stripped.starts_with?('#')
+          if match = stripped.match(/^EXPOSE\s+(\d+)/i)
+            return match[1].to_i64?
+          end
+        end
+        nil
+      end
+
+      def self.generate_auto_compose(ctx : Context, repo_dir : String) : String
         cname = Yozgat::Deploy.container_name(ctx.project_id, ctx.env_slug, ctx.deployment_slug)
-        port = ctx.assigned_port || 8080
+        host_port = ctx.assigned_port || 8080
+        container_port = detect_expose_port(repo_dir) || 8080
 
         "services:\n" \
           "  app:\n" \
@@ -149,7 +179,7 @@ module Yozgat
           "    container_name: #{cname}\n" \
           "    restart: unless-stopped\n" \
           "    ports:\n" \
-          "      - \"#{port}:8080\"\n"
+          "      - \"#{host_port}:#{container_port}\"\n"
       end
 
       private def self.compose_relative(repo_dir : String, compose_path : String) : String

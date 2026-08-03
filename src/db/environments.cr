@@ -62,6 +62,14 @@ module Yozgat
         )
       end
 
+      def self.fetch_host_port(project_id : Int64, env_id : Int64) : Int64?
+        Yozgat::DB.database.query_one?(
+          "SELECT host_port FROM environments WHERE id = ?1 AND project_id = ?2",
+          env_id, project_id,
+          as: Int64?,
+        )
+      end
+
       def self.create(project_id : Int64, name : String, slug : String) : Row
         Yozgat::DB.database.exec(
           "INSERT INTO environments (project_id, name, slug) VALUES (?1, ?2, ?3)",

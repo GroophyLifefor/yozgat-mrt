@@ -62,6 +62,15 @@ module Yozgat
         Current.update(env_dir, ctx.deployment_slug)
         Logs.write_line(log_path, "updated current pointer")
 
+        if !has_domains
+          if host_port = detect_host_port(compose_path)
+            if host_port != Yozgat::DB::Environments.fetch_host_port(ctx.project_id, ctx.environment_id)
+              Yozgat::DB::Deployments.sync_host_port!(ctx.project_id, ctx.environment_id, ctx.deployment_id, host_port)
+              Logs.write_line(log_path, "host port set to #{host_port} from compose ports")
+            end
+          end
+        end
+
         if has_domains && old_deploy_dir && old_deploy_dir != deploy_dir
           Logs.write_line(log_path, "stopping previous deployment")
           stop_previous!(ctx, old_deploy_dir, log_path)
@@ -94,6 +103,92 @@ module Yozgat
           return rest unless rest.empty?
         end
         File.basename(compose_path)
+      end
+
+      # First published host port from the compose file. Services with a
+      # `build` section are preferred (the app service), otherwise the first
+      # service that publishes any port wins.
+      def self.detect_host_port(compose_path : String) : Int64?
+        content = File.read(compose_path)
+        doc = YAML.parse(content)
+        services = doc["services"]?
+        return nil unless services && services.raw.is_a?(Hash)
+
+        svc_h = services.as_h
+        return nil if svc_h.empty?
+
+        build = svc_h.values.find { |svc| svc["build"]? }
+        candidates = svc_h.values.reject { |svc| svc["build"]? }
+        candidates.unshift(build) if build
+
+        candidates.each do |svc|
+          if port = parse_ports(svc["ports"]?)
+            return port
+          end
+        end
+        nil
+      end
+
+      private def self.parse_ports(ports : YAML::Any?) : Int64?
+        return nil unless ports
+        case ports.raw
+        when Array
+          ports.as_a.each do |entry|
+            if port = parse_port_entry(entry)
+              return port
+            end
+          end
+        when Hash
+          parse_port_entry(ports)
+        end
+        nil
+      end
+
+      private def self.parse_port_entry(entry : YAML::Any) : Int64?
+        case raw = entry.raw
+        when String
+          parse_port_string(raw)
+        when Hash
+          h = entry.as_h
+          if pub = h["published"]? || h["host"]?
+            return yaml_int(pub)
+          end
+          # YAML 1.1 shorthand: `8003:8003` parses as a one-key mapping.
+          if h.size == 1
+            key = h.keys.first
+            if key.raw.is_a?(Int64) || key.raw.is_a?(String)
+              s = key.to_s
+              return s.to_i64? if s.matches?(/^\d+$/)
+            end
+          end
+          nil
+        when Int64
+          raw
+        else
+          nil
+        end
+      end
+
+      private def self.parse_port_string(s : String) : Int64?
+        clean = s.strip.sub(%r{/tcp$}i, "").sub(%r{/udp$}i, "")
+        return nil if clean.empty?
+
+        if clean.includes?(':')
+          parts = clean.split(':')
+          host = parts.size >= 3 ? parts[-2] : parts[0]
+          host.to_i64?
+        else
+          clean.to_i64?
+        end
+      end
+
+      private def self.yaml_int(v : YAML::Any) : Int64?
+        case raw = v.raw
+        when Int64
+          raw
+        when String
+          raw.to_i64?
+        end
       end
 
       private def self.stop_previous!(ctx : Context, old_deploy_dir : String, log_path : String) : Nil
