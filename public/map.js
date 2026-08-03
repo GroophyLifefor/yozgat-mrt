@@ -113,7 +113,7 @@
         let maxEnvH = 0;
         let envRowW = 0;
 
-        for (const env of project.environments) {
+        for (const env of project.environments || []) {
           const l = this.layoutEnv(project, env);
           envs.push(l);
           maxEnvH = Math.max(maxEnvH, l.height);
@@ -264,7 +264,7 @@
 
     render() {
       const hasServices = this.projects.some((p) =>
-        p.environments.some((e) => (e.nodes || []).length > 0)
+        (p.environments || []).some((e) => (e.nodes || []).length > 0)
       );
       if (this.emptyEl) this.emptyEl.hidden = hasServices;
       this.renderNodes();
@@ -328,7 +328,7 @@
       box.appendChild(header);
 
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.className = "map-env-edges";
+      svg.setAttribute("class", "map-env-edges");
       svg.setAttribute("width", env.width);
       svg.setAttribute("height", env.height);
       box.appendChild(svg);
