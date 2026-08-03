@@ -15,35 +15,25 @@
           <span>YOZGAT</span>
         </div>
         <nav>
-          <a href="#" id="nav-overview">Overview</a>
-          <a href="#" class="active" id="nav-map">Map</a>
-          <a href="#" id="nav-deployments">Deployments</a>
-          <a href="#" id="nav-logs">Logs</a>
-          <a href="#" id="nav-metrics">Metrics</a>
-          <a href="/index.html" id="nav-settings">Settings</a>
+          <a href="/map.html" class="active">Map</a>
+          <a href="/index.html">Projects</a>
+          <a href="/create-project.html">New project</a>
+          <a href="/docs" target="_blank" rel="noopener">API docs</a>
+          <a href="/index.html">Settings</a>
         </nav>
         <div class="sidebar-footer">
           <span id="sidebar-user">…</span>
+          <button type="button" class="secondary inline" id="logout">Sign out</button>
         </div>
       </aside>
 
       <div class="workspace">
         <header class="map-topbar">
-          <div class="select-wrap">
-            <label for="project-select">Project</label>
-            <select id="project-select"></select>
-          </div>
-          <div class="select-wrap">
-            <label for="env-select">Environment</label>
-            <select id="env-select"></select>
-          </div>
-          <input type="search" id="map-search" placeholder="Search services…" autocomplete="off">
+          <input type="search" id="map-search" placeholder="Search projects, environments, services…" autocomplete="off">
           <span class="spacer"></span>
           <span class="map-status" id="map-status">—</span>
           <button type="button" class="secondary" id="btn-refresh">Refresh</button>
           <button type="button" class="secondary" id="btn-fit">Fit view</button>
-          <button type="button" class="secondary" id="btn-layout">Auto layout</button>
-          <button type="button" class="secondary" id="logout">Sign out</button>
         </header>
 
         <div class="map-viewport-wrap">
@@ -51,7 +41,7 @@
           <div class="map-empty" id="map-empty" hidden>
             <div>
               <h3>No running services</h3>
-              <p>Deploy this environment to see the service map.</p>
+              <p>Deploy a project to see the service map.</p>
             </div>
           </div>
           <div class="map-viewport" id="map-root">
@@ -68,7 +58,6 @@
     <script>
       const map = new YozgatMap(document.getElementById("map-root"));
       let projects = [];
-      let environments = [];
       let pollTimer = null;
 
       (async function () {
@@ -77,129 +66,54 @@
         document.getElementById("sidebar-user").textContent = user.email;
         document.getElementById("logout").addEventListener("click", logout);
 
-        await loadProjects();
         bindControls();
-        updateNavLinks();
+        await loadTopology();
       })();
 
       function bindControls() {
-        document.getElementById("project-select").addEventListener("change", onProjectChange);
-        document.getElementById("env-select").addEventListener("change", loadTopology);
         document.getElementById("btn-refresh").addEventListener("click", loadTopology);
         document.getElementById("btn-fit").addEventListener("click", () => map.fitView());
-        document.getElementById("btn-layout").addEventListener("click", () => {
-          map.autoLayout();
-          map.refresh();
-          map.fitView();
-        });
         document.getElementById("map-search").addEventListener("input", (e) => {
           map.setSearch(e.target.value);
         });
       }
 
-      function updateNavLinks() {
-        const pid = currentProjectId();
-        const base = pid ? "/project.html?id=" + pid : "/index.html";
-        document.getElementById("nav-overview").href = base;
-        document.getElementById("nav-map").href = pid ? "/map.html?project=" + pid : "/map.html";
-        document.getElementById("nav-deployments").href = base + "#deployments";
-        document.getElementById("nav-logs").href = base + "#deploy";
-        document.getElementById("nav-metrics").href = pid ? "/map.html?project=" + pid : "/map.html";
-      }
-
-      function currentProjectId() {
-        const sel = document.getElementById("project-select");
-        return sel && sel.value ? Number(sel.value) : null;
-      }
-
-      function currentEnvId() {
-        const sel = document.getElementById("env-select");
-        return sel && sel.value ? Number(sel.value) : null;
-      }
-
-      async function loadProjects() {
-        const { res, data } = await apiJson("/projects");
-        if (!res.ok) return;
-
-        projects = (data && data.projects) || [];
-        const sel = document.getElementById("project-select");
-        sel.innerHTML = projects
-          .map((p) => '<option value="' + p.id + '">' + escapeHtml(p.name) + "</option>")
-          .join("");
-
-        const qProject = Number(queryParam("project") || queryParam("id"));
-        if (qProject && projects.some((p) => p.id === qProject)) {
-          sel.value = String(qProject);
-        }
-
-        await onProjectChange();
-      }
-
-      async function onProjectChange() {
-        updateNavLinks();
-        const pid = currentProjectId();
-        if (!pid) return;
-
-        const { res, data } = await apiJson("/projects/" + pid + "/environments");
-        environments = (res.ok && data && data.environments) ? data.environments : [];
-
-        const sel = document.getElementById("env-select");
-        sel.innerHTML = environments
-          .map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + " (" + escapeHtml(e.slug) + ")</option>")
-          .join("");
-
-        const qEnv = queryParam("env");
-        if (qEnv) {
-          const match = environments.find((e) => e.slug === qEnv || String(e.id) === qEnv);
-          if (match) sel.value = String(match.id);
-        } else {
-          const prod = environments.find((e) => e.slug === "prod");
-          if (prod) sel.value = String(prod.id);
-        }
-
-        await loadTopology();
-      }
-
       async function loadTopology() {
-        const pid = currentProjectId();
-        const eid = currentEnvId();
-        if (!pid || !eid) return;
-
         if (pollTimer) clearInterval(pollTimer);
         map.setLoading(true);
         setStatus("Loading…");
 
         try {
-          const { res, data } = await apiJson("/projects/" + pid + "/environments/" + eid + "/topology");
+          const { res, data } = await apiJson("/topology");
 
           if (!res.ok) {
             setStatus((data && data.error) || "Could not load topology");
-            map.setData([], []);
+            map.setHierarchy([]);
             return;
           }
 
-          const topo = (data && data.topology) || {};
-          map.setData(topo.nodes || [], topo.edges || []);
+          projects = (data && data.topology && data.topology.projects) || [];
+          map.setHierarchy(projects);
+          updateStatus();
 
-          const slug = topo.deploymentSlug || "none";
-          const updated = topo.updatedAt ? formatDate(topo.updatedAt) : "—";
-          setStatus("Deployment " + slug + " · updated " + updated);
-
-          pollTimer = setInterval(refreshStats, 15000);
+          pollTimer = setInterval(refreshTopology, 15000);
         } finally {
           map.setLoading(false);
         }
       }
 
-      async function refreshStats() {
-        const pid = currentProjectId();
-        const eid = currentEnvId();
-        if (!pid || !eid) return;
-
-        const { res, data } = await apiJson("/projects/" + pid + "/environments/" + eid + "/topology");
+      async function refreshTopology() {
+        const { res, data } = await apiJson("/topology");
         if (!res.ok || !data || !data.topology) return;
 
-        map.updateStats(data.topology.nodes || [], data.topology.edges || []);
+        projects = data.topology.projects || [];
+        map.updateHierarchy(projects);
+        updateStatus();
+      }
+
+      function updateStatus() {
+        const envCount = projects.reduce((n, p) => n + (p.environments ? p.environments.length : 0), 0);
+        setStatus(projects.length + " projects · " + envCount + " environments");
       }
 
       function setStatus(msg) {

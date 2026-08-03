@@ -183,16 +183,85 @@ body.map-app {
   pointer-events: none;
 }
 
+.map-project {
+  position: absolute;
+  background: rgba(246, 244, 239, .55);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.map-project.is-dimmed { opacity: .35; }
+
+.map-project-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.map-project-header strong {
+  font-size: .95rem;
+  letter-spacing: -.01em;
+}
+
+.map-env {
+  position: absolute;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.map-env.is-dimmed { opacity: .3; }
+
+.map-env-header {
+  padding: 8px 12px;
+  font-size: .74rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-env-edges {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.map-env-edges path {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.25;
+  opacity: .85;
+}
+
+.map-env-edges path.highlight {
+  stroke: var(--primary);
+  opacity: 1;
+  stroke-width: 1.5;
+}
+
+.map-env-nodes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .map-node {
   position: absolute;
   width: 240px;
   pointer-events: auto;
-  cursor: grab;
   user-select: none;
   transition: box-shadow .12s;
 }
-
-.map-node.is-dragging { cursor: grabbing; z-index: 30; }
 
 .map-node.is-dimmed { opacity: .35; }
 

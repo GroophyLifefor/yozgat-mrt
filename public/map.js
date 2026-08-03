@@ -1,12 +1,22 @@
 /**
- * Yozgat Map — interactive Docker service topology graph.
+ * Yozgat Map — global Docker service topology graph.
+ *
+ * Renders every project and environment as a hierarchy of boxes:
+ * project band → environment box → service cards. View-only: no node drag,
+ * wheel zoom + pan + fit view + minimap remain.
  */
 (function () {
   const NODE_W = 240;
   const NODE_H = 168;
-  const GAP_X = 80;
-  const GAP_Y = 100;
+  const GAP_X = 60;
+  const GAP_Y = 80;
   const EXTERNAL_W = 160;
+  const ENV_PAD = 24;
+  const ENV_HEADER = 36;
+  const ENV_GAP = 40;
+  const PROJ_PAD = 20;
+  const PROJ_HEADER = 42;
+  const PROJ_GAP = 56;
 
   function healthClass(h) {
     const s = (h || "").toLowerCase();
@@ -50,16 +60,14 @@
       this.emptyEl = wrap.querySelector(".map-empty");
       this.loadingEl = wrap.querySelector(".map-loading");
 
-      this.nodes = [];
-      this.edges = [];
+      this.projects = [];
+      this.layout = null; // { projects: [{ left, top, width, height, envs: [...] }] }
       this.positions = new Map();
-      this.expanded = new Set();
       this.searchQuery = "";
 
       this.scale = 1;
       this.panX = 0;
       this.panY = 0;
-      this.draggingNode = null;
       this.panning = false;
       this.lastPointer = null;
 
@@ -73,12 +81,18 @@
       window.addEventListener("pointerup", () => this.onPointerUp());
     }
 
-    setData(nodes, edges) {
-      this.nodes = nodes || [];
-      this.edges = edges || [];
-      this.positions.clear();
-      this.autoLayout();
+    setHierarchy(projects) {
+      this.projects = projects || [];
+      this.computeLayout();
       this.render();
+    }
+
+    updateHierarchy(projects) {
+      this.projects = projects || [];
+      this.computeLayout();
+      this.renderNodes();
+      this.drawEdges();
+      this.drawMinimap();
     }
 
     setLoading(on) {
@@ -88,36 +102,115 @@
       el.style.display = on ? "flex" : "none";
     }
 
-    autoLayout() {
+    computeLayout() {
+      this.positions.clear();
+      const projects = [];
+      let projTop = PROJ_PAD;
+
+      for (const project of this.projects) {
+        const envs = [];
+        let maxEnvH = 0;
+        let envRowW = 0;
+
+        for (const env of project.environments) {
+          const l = this.layoutEnv(project, env);
+          envs.push(l);
+          maxEnvH = Math.max(maxEnvH, l.height);
+          envRowW += l.width + ENV_GAP;
+        }
+        envRowW = Math.max(0, envRowW - ENV_GAP);
+
+        const width = Math.max(PROJ_PAD * 2 + envRowW, 600);
+        const height = PROJ_HEADER + maxEnvH + PROJ_PAD;
+        const envLeft = Math.max(PROJ_PAD, (width - envRowW) / 2);
+
+        let envX = envLeft;
+        for (const l of envs) {
+          l.left = envX;
+          l.top = PROJ_HEADER;
+          l.height = maxEnvH;
+
+          for (const n of l.nodes) {
+            const p = l.positions.get(n.__scope + n.id);
+            if (!p) continue;
+            this.positions.set(n.__scope + n.id, {
+              x: envX + p.x,
+              y: projTop + l.top + p.y,
+              w: p.w,
+              h: p.h,
+              envId: env.id,
+            });
+          }
+
+          envX += l.width + ENV_GAP;
+        }
+
+        projects.push({ left: 40, top: projTop, width, height, envs, source: project });
+        projTop += height + PROJ_GAP;
+      }
+
+      this.layout = { projects };
+    }
+
+    layoutEnv(project, env) {
+      const prefix = "p" + project.id + "e" + env.id + ":";
+      const nodes = (env.nodes || []).filter((n) => n.id !== "internet" && n.name !== "traefik");
+
+      const nodeIds = new Set();
+      for (const n of nodes) {
+        n.__scope = prefix;
+        nodeIds.add(prefix + n.id);
+      }
+
+      const edges = [];
+      for (const e of env.edges || []) {
+        const from = prefix + e.from;
+        const to = prefix + e.to;
+        if (nodeIds.has(from) && nodeIds.has(to)) edges.push({ from, to, kind: e.kind });
+      }
+
       const byTier = new Map();
-      for (const n of this.nodes) {
+      for (const n of nodes) {
         const t = n.tier != null ? n.tier : 2;
         if (!byTier.has(t)) byTier.set(t, []);
         byTier.get(t).push(n);
       }
 
       const tiers = Array.from(byTier.keys()).sort((a, b) => a - b);
-      let y = 40;
+      const positions = new Map();
+      let envW = ENV_PAD * 2;
+      let y = ENV_HEADER;
 
       for (const tier of tiers) {
         const row = byTier.get(tier);
         row.sort((a, b) => a.name.localeCompare(b.name));
-        const rowWidth = row.reduce((sum, n) => sum + (n.kind === "external" ? EXTERNAL_W : NODE_W) + GAP_X, -GAP_X);
-        let x = Math.max(40, (2400 - rowWidth) / 2);
-
+        const rowWidth = row.reduce((s, n) => s + (n.kind === "external" ? EXTERNAL_W : NODE_W) + GAP_X, -GAP_X);
+        let x = ENV_PAD;
         for (const n of row) {
           const w = n.kind === "external" ? EXTERNAL_W : NODE_W;
-          this.positions.set(n.id, { x, y, w, h: n.kind === "external" ? 72 : NODE_H });
+          const h = n.kind === "external" ? 72 : NODE_H;
+          positions.set(prefix + n.id, { x, y, w, h });
           x += w + GAP_X;
         }
+        envW = Math.max(envW, ENV_PAD * 2 + rowWidth);
         y += NODE_H + GAP_Y;
       }
+
+      return {
+        env,
+        prefix,
+        nodes,
+        edges,
+        positions,
+        width: envW,
+        height: Math.max(y + ENV_PAD, ENV_HEADER + 60),
+      };
     }
 
     fitView() {
-      if (!this.nodes.length) return;
+      if (!this.positions.size) return;
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const [id, p] of this.positions) {
+      for (const p of this.positions.values()) {
         minX = Math.min(minX, p.x);
         minY = Math.min(minY, p.y);
         maxX = Math.max(maxX, p.x + p.w);
@@ -132,7 +225,6 @@
       this.panX = (rect.width - graphW * this.scale) / 2 - (minX - pad) * this.scale;
       this.panY = (rect.height - graphH * this.scale) / 2 - (minY - pad) * this.scale;
       this.applyTransform();
-      this.drawEdges();
       this.drawMinimap();
     }
 
@@ -148,11 +240,19 @@
       this.drawMinimap();
     }
 
-    updateStats(nodes, edges) {
-      this.nodes = nodes || [];
-      this.edges = edges || [];
-      this.renderNodes();
-      this.drawEdges();
+    matchesSearch(str) {
+      return String(str || "").toLowerCase().includes(this.searchQuery);
+    }
+
+    envMatch(project, env) {
+      if (!this.searchQuery) return true;
+      if (!project) return false;
+      return (
+        this.matchesSearch(project.name) ||
+        this.matchesSearch(project.projectType) ||
+        this.matchesSearch(env.name) ||
+        this.matchesSearch(env.slug)
+      );
     }
 
     applyTransform() {
@@ -162,9 +262,10 @@
     }
 
     render() {
-      if (this.emptyEl) {
-        this.emptyEl.hidden = this.nodes.some((n) => n.kind === "service");
-      }
+      const hasServices = this.projects.some((p) =>
+        p.environments.some((e) => (e.nodes || []).length > 0)
+      );
+      if (this.emptyEl) this.emptyEl.hidden = hasServices;
       this.renderNodes();
       this.drawEdges();
       this.drawMinimap();
@@ -173,31 +274,90 @@
 
     renderNodes() {
       this.nodesLayer.innerHTML = "";
-      for (const n of this.nodes) {
-        if (n.kind === "external") continue;
-        this.nodesLayer.appendChild(this.createNodeEl(n));
-      }
-      for (const n of this.nodes) {
-        if (n.kind !== "external") continue;
-        this.nodesLayer.appendChild(this.createNodeEl(n));
+      if (!this.layout) return;
+
+      for (const proj of this.layout.projects) {
+        const band = this.createProjectBand(proj);
+        this.nodesLayer.appendChild(band);
       }
     }
 
-    createNodeEl(n) {
-      const pos = this.positions.get(n.id) || { x: 0, y: 0, w: NODE_W, h: NODE_H };
+    createProjectBand(proj) {
+      const el = document.createElement("div");
+      el.className = "map-project";
+      el.style.left = proj.left + "px";
+      el.style.top = proj.top + "px";
+      el.style.width = proj.width + "px";
+      el.style.height = proj.height + "px";
+
+      const source = proj.source;
+      const header = document.createElement("div");
+      header.className = "map-project-header";
+      header.innerHTML =
+        "<strong>" + escapeHtml(source ? source.name : "Project") + "</strong>" +
+        (source
+          ? '<span class="status-pill ' + statusClass(source.status) + '">' + escapeHtml(source.status) + "</span>"
+          : "");
+      el.appendChild(header);
+
+      for (const env of proj.envs) {
+        el.appendChild(this.createEnvBox(env, source));
+      }
+
+      return el;
+    }
+
+    createEnvBox(env, source) {
+      const box = document.createElement("div");
+      box.className = "map-env";
+      box.dataset.prefix = env.prefix;
+      box.style.left = env.left + "px";
+      box.style.top = env.top + "px";
+      box.style.width = env.width + "px";
+      box.style.height = env.height + "px";
+
+      const envMatch = this.searchQuery ? this.envMatch(source, env.env) : true;
+      if (this.searchQuery && !envMatch) box.classList.add("is-dimmed");
+
+      const port = env.env && env.env.hostPort != null ? " · :" + env.env.hostPort : "";
+      const title = env.env ? env.env.name + " (" + env.env.slug + ")" + port : "";
+      const header = document.createElement("div");
+      header.className = "map-env-header";
+      header.textContent = title;
+      box.appendChild(header);
+
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.className = "map-env-edges";
+      svg.setAttribute("width", env.width);
+      svg.setAttribute("height", env.height);
+      box.appendChild(svg);
+
+      const nodesEl = document.createElement("div");
+      nodesEl.className = "map-env-nodes";
+      for (const n of env.nodes) {
+        const pos = env.positions.get(env.prefix + n.id);
+        if (!pos) continue;
+        nodesEl.appendChild(this.createNodeEl(n, pos, envMatch));
+      }
+      box.appendChild(nodesEl);
+
+      return box;
+    }
+
+    createNodeEl(n, pos, envMatch) {
       const el = document.createElement("div");
       el.className = "map-node" + (n.kind === "external" ? " external" : "");
-      el.dataset.id = n.id;
+      el.dataset.id = n.__scope + n.id;
       el.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
       el.style.width = pos.w + "px";
 
       const q = this.searchQuery;
-      const match =
+      const nodeMatch =
         !q ||
-        n.name.toLowerCase().includes(q) ||
-        (n.image && n.image.toLowerCase().includes(q));
-      if (q && !match) el.classList.add("is-dimmed");
-      if (q && match) el.classList.add("is-highlight");
+        this.matchesSearch(n.name) ||
+        (n.image && this.matchesSearch(n.image));
+      if (q && !envMatch && !nodeMatch) el.classList.add("is-dimmed");
+      if (q && (nodeMatch || envMatch)) el.classList.add("is-highlight");
 
       const cpu = n.cpuPercent != null ? n.cpuPercent.toFixed(1) : null;
       const mem = n.memoryPercent != null ? n.memoryPercent.toFixed(1) : null;
@@ -230,23 +390,11 @@
           : "") +
         "</div>";
 
-      el.addEventListener("pointerdown", (e) => this.startNodeDrag(e, n.id));
       return el;
     }
 
-    startNodeDrag(e, id) {
-      if (e.button !== 0) return;
-      e.stopPropagation();
-      this.draggingNode = id;
-      this.lastPointer = { x: e.clientX, y: e.clientY };
-      const el = this.nodesLayer.querySelector('[data-id="' + id + '"]');
-      if (el) el.classList.add("is-dragging");
-      this.viewport.setPointerCapture(e.pointerId);
-    }
-
     onPointerDown(e) {
-      if (this.draggingNode) return;
-      if (e.target.closest(".map-node")) return;
+      if (e.target.closest(".map-node") || e.target.closest(".map-env-header")) return;
       this.panning = true;
       this.lastPointer = { x: e.clientX, y: e.clientY };
       this.viewport.classList.add("is-panning");
@@ -258,19 +406,6 @@
       const dy = e.clientY - this.lastPointer.y;
       this.lastPointer = { x: e.clientX, y: e.clientY };
 
-      if (this.draggingNode) {
-        const pos = this.positions.get(this.draggingNode);
-        if (pos) {
-          pos.x += dx / this.scale;
-          pos.y += dy / this.scale;
-          const el = this.nodesLayer.querySelector('[data-id="' + this.draggingNode + '"]');
-          if (el) el.style.transform = "translate(" + pos.x + "px, " + pos.y + "px)";
-          this.drawEdges();
-          this.drawMinimap();
-        }
-        return;
-      }
-
       if (this.panning) {
         this.panX += dx;
         this.panY += dy;
@@ -280,11 +415,6 @@
     }
 
     onPointerUp() {
-      if (this.draggingNode) {
-        const el = this.nodesLayer.querySelector('[data-id="' + this.draggingNode + '"]');
-        if (el) el.classList.remove("is-dragging");
-      }
-      this.draggingNode = null;
       this.panning = false;
       this.lastPointer = null;
       this.viewport.classList.remove("is-panning");
@@ -305,41 +435,46 @@
     }
 
     drawEdges() {
-      const svg = this.edgesSvg;
-      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      if (!this.layout) return;
+      for (const proj of this.layout.projects) {
+        for (const env of proj.envs) {
+          const svg = this.nodesLayer.querySelector(
+            '.map-env[data-prefix="' + env.prefix + '"] .map-env-edges'
+          );
+          if (!svg) continue;
+          while (svg.firstChild) svg.removeChild(svg.firstChild);
 
-      const q = this.searchQuery;
-      const highlightIds = new Set();
-      if (q) {
-        for (const n of this.nodes) {
-          if (
-            n.name.toLowerCase().includes(q) ||
-            (n.image && n.image.toLowerCase().includes(q))
-          ) {
-            highlightIds.add(n.id);
+          const q = this.searchQuery;
+          const highlightIds = new Set();
+          if (q) {
+            for (const n of env.nodes) {
+              if (this.matchesSearch(n.name) || (n.image && this.matchesSearch(n.image))) {
+                highlightIds.add(env.prefix + n.id);
+              }
+            }
+          }
+
+          for (const edge of env.edges) {
+            const from = env.positions.get(edge.from);
+            const to = env.positions.get(edge.to);
+            if (!from || !to) continue;
+
+            const x1 = from.x + from.w / 2;
+            const y1 = from.y + from.h;
+            const x2 = to.x + to.w / 2;
+            const y2 = to.y;
+
+            const midY = y1 + (y2 - y1) / 2;
+            const d = "M" + x1 + " " + y1 + " L" + x1 + " " + midY + " L" + x2 + " " + midY + " L" + x2 + " " + y2;
+
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", d);
+            if (q && (highlightIds.has(edge.from) || highlightIds.has(edge.to))) {
+              path.classList.add("highlight");
+            }
+            svg.appendChild(path);
           }
         }
-      }
-
-      for (const edge of this.edges) {
-        const from = this.positions.get(edge.from);
-        const to = this.positions.get(edge.to);
-        if (!from || !to) continue;
-
-        const x1 = from.x + from.w / 2;
-        const y1 = from.y + from.h;
-        const x2 = to.x + to.w / 2;
-        const y2 = to.y;
-
-        const midY = y1 + (y2 - y1) / 2;
-        const d = "M" + x1 + " " + y1 + " L" + x1 + " " + midY + " L" + x2 + " " + midY + " L" + x2 + " " + y2;
-
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", d);
-        if (q && (highlightIds.has(edge.from) || highlightIds.has(edge.to))) {
-          path.classList.add("highlight");
-        }
-        svg.appendChild(path);
       }
     }
 
@@ -362,10 +497,7 @@
       const gh = maxY - minY + 40;
       const s = Math.min(mw / gw, mh / gh);
 
-      for (const n of this.nodes) {
-        if (n.kind === "external") continue;
-        const p = this.positions.get(n.id);
-        if (!p) continue;
+      for (const p of this.positions.values()) {
         const dot = document.createElement("div");
         dot.className = "map-minimap-node";
         dot.style.left = (p.x - minX + 20) * s + "px";
