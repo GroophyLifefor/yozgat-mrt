@@ -134,11 +134,11 @@
             const p = l.positions.get(n.__scope + n.id);
             if (!p) continue;
             this.positions.set(n.__scope + n.id, {
-              x: envX + p.x,
+              x: proj.left + envX + p.x,
               y: projTop + l.top + p.y,
               w: p.w,
               h: p.h,
-              envId: env.id,
+              envId: l.env.id,
             });
           }
 
