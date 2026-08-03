@@ -249,6 +249,15 @@ body.map-app {
   stroke-width: 1.5;
 }
 
+.map-edge-label {
+  font-size: 9px;
+  fill: var(--muted);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
 .map-env-nodes {
   position: absolute;
   inset: 0;
@@ -276,9 +285,10 @@ body.map-app {
 }
 
 .map-node.external .map-node-card {
-  width: 160px;
+  width: 100%;
   text-align: center;
-  margin: 0 auto;
+  margin: 0;
+  padding: 10px 8px;
 }
 
 .map-node-header {
@@ -404,6 +414,18 @@ body.map-app {
   color: var(--muted);
 }
 
+.map-external-icon {
+  width: 26px;
+  height: 26px;
+  margin: 0 auto 4px;
+  color: var(--muted);
+  display: block;
+}
+
+.map-node.external .map-node-title {
+  font-size: .82rem;
+}
+
 .map-minimap {
   position: absolute;
   right: 14px;
@@ -416,6 +438,35 @@ body.map-app {
   box-shadow: var(--shadow);
   z-index: 15;
   overflow: hidden;
+  cursor: pointer;
+}
+
+.map-minimap-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.map-minimap-project {
+  position: absolute;
+  background: rgba(47, 77, 56, .05);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.map-minimap-env {
+  position: absolute;
+  background: rgba(246, 244, 239, .9);
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+}
+
+.map-minimap-line {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  opacity: .7;
 }
 
 .map-minimap-viewport {

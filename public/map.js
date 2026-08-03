@@ -2,22 +2,29 @@
  * Yozgat Map — global Docker service topology graph.
  *
  * Renders every project and environment as a hierarchy of boxes:
- * project band → environment box → service cards. View-only: no node drag,
- * wheel zoom + pan + fit view + minimap remain.
+ * project band → environment box → service cards. Services flow
+ * horizontally left-to-right (Internet → Proxy → Services → Databases).
+ * View-only: no node drag, wheel zoom + pan + fit view + minimap remain.
  */
 (function () {
   const NODE_W = 240;
-  const NODE_H = 168;
-  const GAP_X = 60;
-  const GAP_Y = 80;
-  const EXTERNAL_W = 160;
-  const ENV_PAD = 24;
-  const ENV_HEADER = 36;
-  const ENV_GAP = 40;
-  const PROJ_LEFT = 40;
-  const PROJ_PAD = 20;
-  const PROJ_HEADER = 42;
-  const PROJ_GAP = 56;
+  const NODE_H = 148;
+  const GAP_X = 48;
+  const GAP_Y = 16;
+  const EXTERNAL_W = 150;
+  const EXTERNAL_H = 64;
+  const ENV_PAD = 16;
+  const ENV_HEADER = 32;
+  const ENV_GAP = 32;
+  const PROJ_LEFT = 24;
+  const PROJ_PAD = 16;
+  const PROJ_HEADER = 40;
+  const PROJ_GAP = 48;
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+
+  const CLOUD_ICON =
+    '<svg viewBox="0 0 24 24" class="map-external-icon" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>';
 
   function healthClass(h) {
     const s = (h || "").toLowerCase();
@@ -35,19 +42,35 @@
     return "status-error";
   }
 
-  function formatBytes(n) {
-    if (n == null || n <= 0) return "—";
-    if (n >= 1024 * 1024 * 1024) return (n / (1024 * 1024 * 1024)).toFixed(1) + " GiB";
-    if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(0) + " MiB";
-    if (n >= 1024) return (n / 1024).toFixed(0) + " KiB";
-    return n + " B";
-  }
-
   function meterClass(pct) {
     if (pct == null) return "";
     if (pct >= 85) return "bad";
     if (pct >= 65) return "warn";
     return "";
+  }
+
+  function edgeLabel(kind) {
+    if (kind === "ingress") return "HTTP/HTTPS";
+    if (kind === "proxy") return "TCP";
+    if (kind === "depends_on") return "Depends On";
+    return "Internal Network";
+  }
+
+  // Orthogonal route between two points. Left-to-right edges bend at the
+  // midpoint horizontally; backwards edges bend vertically instead.
+  function orthogonalPoints(x1, y1, x2, y2) {
+    if (x2 >= x1) {
+      const midX = x1 + (x2 - x1) / 2;
+      return [[x1, y1], [midX, y1], [midX, y2], [x2, y2]];
+    }
+    const midY = y1 + (y2 - y1) / 2;
+    return [[x1, y1], [x1, midY], [x2, midY], [x2, y2]];
+  }
+
+  function pathFromPoints(pts) {
+    return pts
+      .map((p, i) => (i === 0 ? "M" : "L") + p[0] + " " + p[1])
+      .join(" ");
   }
 
   class YozgatMap {
@@ -64,6 +87,9 @@
       this.projects = [];
       this.layout = null; // { projects: [{ left, top, width, height, envs: [...] }] }
       this.positions = new Map();
+      this.projectRects = [];
+      this.envRects = [];
+      this.globalEdges = [];
       this.searchQuery = "";
 
       this.scale = 1;
@@ -72,7 +98,13 @@
       this.panning = false;
       this.lastPointer = null;
 
+      this.minimapScale = 0;
+      this.minimapMinX = 0;
+      this.minimapMinY = 0;
+      this.minimapDragging = false;
+
       this.bindViewport();
+      this.bindMinimap();
     }
 
     bindViewport() {
@@ -80,6 +112,17 @@
       this.viewport.addEventListener("pointerdown", (e) => this.onPointerDown(e));
       window.addEventListener("pointermove", (e) => this.onPointerMove(e));
       window.addEventListener("pointerup", () => this.onPointerUp());
+    }
+
+    bindMinimap() {
+      if (!this.minimap) return;
+      this.minimap.addEventListener("pointerdown", (e) => this.onMinimapPointer(e));
+      window.addEventListener("pointermove", (e) => {
+        if (this.minimapDragging) this.onMinimapPointer(e);
+      });
+      window.addEventListener("pointerup", () => {
+        this.minimapDragging = false;
+      });
     }
 
     setHierarchy(projects) {
@@ -105,6 +148,9 @@
 
     computeLayout() {
       this.positions.clear();
+      this.projectRects = [];
+      this.envRects = [];
+      this.globalEdges = [];
       const projects = [];
       let projTop = PROJ_PAD;
 
@@ -121,7 +167,8 @@
         }
         envRowW = Math.max(0, envRowW - ENV_GAP);
 
-        const width = Math.max(PROJ_PAD * 2 + envRowW, 600);
+        // Project wraps its environments tightly; no fixed minimum width.
+        const width = Math.max(PROJ_PAD * 2 + envRowW, 220);
         const height = PROJ_HEADER + maxEnvH + PROJ_PAD;
         const envLeft = Math.max(PROJ_PAD, (width - envRowW) / 2);
 
@@ -129,7 +176,15 @@
         for (const l of envs) {
           l.left = envX;
           l.top = PROJ_HEADER;
-          l.height = maxEnvH;
+
+          this.envRects.push({
+            x: PROJ_LEFT + envX,
+            y: projTop + l.top,
+            w: l.width,
+            h: l.height,
+          });
+
+          for (const e of l.edges) this.globalEdges.push(e);
 
           for (const n of l.nodes) {
             const p = l.positions.get(n.__scope + n.id);
@@ -139,13 +194,13 @@
               y: projTop + l.top + p.y,
               w: p.w,
               h: p.h,
-              envId: l.env.id,
             });
           }
 
           envX += l.width + ENV_GAP;
         }
 
+        this.projectRects.push({ x: PROJ_LEFT, y: projTop, w: width, h: height });
         projects.push({ left: PROJ_LEFT, top: projTop, width, height, envs, source: project });
         projTop += height + PROJ_GAP;
       }
@@ -153,9 +208,12 @@
       this.layout = { projects };
     }
 
+    // Layout one environment as a horizontal execution flow. Tiers become
+    // columns ordered left-to-right (0=Internet, 1=Proxy, 2/3=Services,
+    // 4=Databases); nodes inside a column stack vertically.
     layoutEnv(project, env) {
       const prefix = "p" + project.id + "e" + env.id + ":";
-      const nodes = (env.nodes || []).filter((n) => n.id !== "internet" && n.name !== "traefik");
+      const nodes = (env.nodes || []).slice();
 
       const nodeIds = new Set();
       for (const n of nodes) {
@@ -179,22 +237,27 @@
 
       const tiers = Array.from(byTier.keys()).sort((a, b) => a - b);
       const positions = new Map();
-      let envW = ENV_PAD * 2;
-      let y = ENV_HEADER;
+      let x = ENV_PAD;
+      let envW = ENV_PAD;
+      let maxColH = ENV_HEADER;
 
       for (const tier of tiers) {
-        const row = byTier.get(tier);
-        row.sort((a, b) => a.name.localeCompare(b.name));
-        const rowWidth = row.reduce((s, n) => s + (n.kind === "external" ? EXTERNAL_W : NODE_W) + GAP_X, -GAP_X);
-        let x = ENV_PAD;
-        for (const n of row) {
+        const col = byTier.get(tier);
+        col.sort((a, b) => a.name.localeCompare(b.name));
+        let colW = 0;
+        let y = ENV_HEADER;
+
+        for (const n of col) {
           const w = n.kind === "external" ? EXTERNAL_W : NODE_W;
-          const h = n.kind === "external" ? 72 : NODE_H;
+          const h = n.kind === "external" ? EXTERNAL_H : NODE_H;
           positions.set(prefix + n.id, { x, y, w, h });
-          x += w + GAP_X;
+          colW = Math.max(colW, w);
+          y += h + GAP_Y;
         }
-        envW = Math.max(envW, ENV_PAD * 2 + rowWidth);
-        y += NODE_H + GAP_Y;
+
+        maxColH = Math.max(maxColH, y - GAP_Y + ENV_PAD);
+        envW = x + colW;
+        x += colW + GAP_X;
       }
 
       return {
@@ -203,8 +266,8 @@
         nodes,
         edges,
         positions,
-        width: envW,
-        height: Math.max(y + ENV_PAD, ENV_HEADER + 60),
+        width: Math.max(envW + ENV_PAD, ENV_PAD * 2 + 120),
+        height: Math.max(maxColH, ENV_HEADER + 24),
       };
     }
 
@@ -264,7 +327,7 @@
 
     render() {
       const hasServices = this.projects.some((p) =>
-        (p.environments || []).some((e) => (e.nodes || []).length > 0)
+        (p.environments || []).some((e) => (e.nodes || []).some((n) => n.kind !== "external"))
       );
       if (this.emptyEl) this.emptyEl.hidden = hasServices;
       this.renderNodes();
@@ -327,7 +390,7 @@
       header.textContent = title;
       box.appendChild(header);
 
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      const svg = document.createElementNS(SVG_NS, "svg");
       svg.setAttribute("class", "map-env-edges");
       svg.setAttribute("width", env.width);
       svg.setAttribute("height", env.height);
@@ -360,34 +423,32 @@
       if (q && !envMatch && !nodeMatch) el.classList.add("is-dimmed");
       if (q && (nodeMatch || envMatch)) el.classList.add("is-highlight");
 
+      // External node: cloud icon only (Internet).
+      if (n.kind === "external") {
+        el.innerHTML =
+          '<div class="map-node-card">' +
+          '<div class="map-external-icon">' + CLOUD_ICON + "</div>" +
+          '<div class="map-node-title">' + escapeHtml(n.name) + "</div>" +
+          "</div>";
+        return el;
+      }
+
       const cpu = n.cpuPercent != null ? n.cpuPercent.toFixed(1) : null;
       const mem = n.memoryPercent != null ? n.memoryPercent.toFixed(1) : null;
-      const replicas = n.replicas > 1 ? n.replicas + " replicas" : null;
 
       el.innerHTML =
         '<div class="map-node-card">' +
         '<div class="map-node-header">' +
-        '<div><div class="map-node-title">' + escapeHtml(n.name) + "</div>" +
-        (n.image ? '<div class="map-node-image">' + escapeHtml(shortImage(n.image)) + "</div>" : "") +
-        "</div>" +
+        '<div class="map-node-title">' + escapeHtml(n.name) + "</div>" +
         '<span class="health-dot ' + healthClass(n.health) + '" title="' + escapeHtml(n.health || "") + '"></span>' +
         "</div>" +
         '<div class="map-node-meta">' +
         '<span class="map-chip ' + statusChipClass(n.status) + '">' + escapeHtml(n.status) + "</span>" +
-        (replicas ? '<span class="map-chip">' + escapeHtml(replicas) + "</span>" : "") +
-        (n.deployedAt ? '<span class="map-chip">' + escapeHtml(relativeTime(n.deployedAt)) + "</span>" : "") +
         "</div>" +
-        (cpu != null
-          ? meterHtml("CPU", cpu, n.cpuPercent)
-          : "") +
-        (mem != null
-          ? meterHtml("Memory", mem, n.memoryPercent)
-          : "") +
+        (cpu != null ? meterHtml("CPU", cpu, n.cpuPercent) : "") +
+        (mem != null ? meterHtml("Memory", mem, n.memoryPercent) : "") +
         (n.ports && n.ports.length
           ? '<div class="map-node-ports">' + escapeHtml(n.ports.slice(0, 3).join(" · ")) + "</div>"
-          : "") +
-        (n.containers && n.containers.length > 1
-          ? containerExpandHtml(n)
           : "") +
         "</div>";
 
@@ -460,20 +521,34 @@
             const to = env.positions.get(edge.to);
             if (!from || !to) continue;
 
-            const x1 = from.x + from.w / 2;
-            const y1 = from.y + from.h;
-            const x2 = to.x + to.w / 2;
-            const y2 = to.y;
+            // Connect the right edge of `from` to the left edge of `to`.
+            const x1 = from.x + from.w;
+            const y1 = from.y + from.h / 2;
+            const x2 = to.x;
+            const y2 = to.y + to.h / 2;
 
-            const midY = y1 + (y2 - y1) / 2;
-            const d = "M" + x1 + " " + y1 + " L" + x1 + " " + midY + " L" + x2 + " " + midY + " L" + x2 + " " + y2;
+            const pts = orthogonalPoints(x1, y1, x2, y2);
+            const d = pathFromPoints(pts);
 
-            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            const path = document.createElementNS(SVG_NS, "path");
             path.setAttribute("d", d);
+            path.setAttribute("stroke-linejoin", "round");
+            path.setAttribute("stroke-linecap", "round");
             if (q && (highlightIds.has(edge.from) || highlightIds.has(edge.to))) {
               path.classList.add("highlight");
             }
             svg.appendChild(path);
+
+            // Label the important connections above the elbow.
+            const midX = x1 + (x2 - x1) / 2;
+            const midY = y1 + (y2 - y1) / 2;
+            const text = document.createElementNS(SVG_NS, "text");
+            text.setAttribute("class", "map-edge-label");
+            text.setAttribute("x", midX);
+            text.setAttribute("y", Math.max(8, midY - 5));
+            text.setAttribute("text-anchor", "middle");
+            text.textContent = edgeLabel(edge.kind);
+            svg.appendChild(text);
           }
         }
       }
@@ -482,9 +557,10 @@
     drawMinimap() {
       if (!this.minimap) return;
       this.minimap.innerHTML = "";
+      if (!this.projectRects.length) return;
 
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const p of this.positions.values()) {
+      for (const p of this.projectRects) {
         minX = Math.min(minX, p.x);
         minY = Math.min(minY, p.y);
         maxX = Math.max(maxX, p.x + p.w);
@@ -498,13 +574,54 @@
       const gh = maxY - minY + 40;
       const s = Math.min(mw / gw, mh / gh);
 
+      this.minimapScale = s;
+      this.minimapMinX = minX - 20;
+      this.minimapMinY = minY - 20;
+
+      // Simplified connection lines first (under everything else).
+      const svg = document.createElementNS(SVG_NS, "svg");
+      svg.setAttribute("class", "map-minimap-svg");
+      this.minimap.appendChild(svg);
+      for (const e of this.globalEdges) {
+        const a = this.positions.get(e.from);
+        const b = this.positions.get(e.to);
+        if (!a || !b) continue;
+        const line = document.createElementNS(SVG_NS, "line");
+        line.setAttribute("x1", ((a.x + a.w / 2) - minX + 20) * s);
+        line.setAttribute("y1", ((a.y + a.h / 2) - minY + 20) * s);
+        line.setAttribute("x2", ((b.x + b.w / 2) - minX + 20) * s);
+        line.setAttribute("y2", ((b.y + b.h / 2) - minY + 20) * s);
+        line.setAttribute("class", "map-minimap-line");
+        svg.appendChild(line);
+      }
+
+      for (const p of this.projectRects) {
+        const el = document.createElement("div");
+        el.className = "map-minimap-project";
+        el.style.left = (p.x - minX + 20) * s + "px";
+        el.style.top = (p.y - minY + 20) * s + "px";
+        el.style.width = Math.max(1, p.w * s) + "px";
+        el.style.height = Math.max(1, p.h * s) + "px";
+        this.minimap.appendChild(el);
+      }
+
+      for (const p of this.envRects) {
+        const el = document.createElement("div");
+        el.className = "map-minimap-env";
+        el.style.left = (p.x - minX + 20) * s + "px";
+        el.style.top = (p.y - minY + 20) * s + "px";
+        el.style.width = Math.max(1, p.w * s) + "px";
+        el.style.height = Math.max(1, p.h * s) + "px";
+        this.minimap.appendChild(el);
+      }
+
       for (const p of this.positions.values()) {
         const dot = document.createElement("div");
         dot.className = "map-minimap-node";
         dot.style.left = (p.x - minX + 20) * s + "px";
         dot.style.top = (p.y - minY + 20) * s + "px";
-        dot.style.width = Math.max(4, p.w * s * 0.25) + "px";
-        dot.style.height = Math.max(3, 8) + "px";
+        dot.style.width = Math.max(2, p.w * s * 0.35) + "px";
+        dot.style.height = Math.max(2, 6) + "px";
         this.minimap.appendChild(dot);
       }
 
@@ -522,6 +639,26 @@
       vp.style.height = vh + "px";
       this.minimap.appendChild(vp);
     }
+
+    // Clicking or dragging inside the minimap moves the main canvas so the
+    // pointer location becomes the centre of the viewport (zoom is kept).
+    onMinimapPointer(e) {
+      if (!this.minimapScale || !this.scale) return;
+      this.minimapDragging = true;
+      if (e.preventDefault) e.preventDefault();
+
+      const rect = this.minimap.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const gx = mx / this.minimapScale + this.minimapMinX;
+      const gy = my / this.minimapScale + this.minimapMinY;
+
+      const vr = this.viewport.getBoundingClientRect();
+      this.panX = vr.width / 2 - gx * this.scale;
+      this.panY = vr.height / 2 - gy * this.scale;
+      this.applyTransform();
+      this.drawMinimap();
+    }
   }
 
   function meterHtml(label, text, pct) {
@@ -534,45 +671,6 @@
       Math.min(100, Math.max(0, pct)) +
       '%"></div></div></div>'
     );
-  }
-
-  function containerExpandHtml(n) {
-    let rows = "";
-    for (const c of n.containers) {
-      rows +=
-        '<div class="map-container-row"><span>' +
-        escapeHtml(c.name) +
-        '</span><span class="health-dot ' +
-        healthClass(c.health) +
-        '"></span></div>';
-    }
-    return (
-      '<details class="map-node-expand"><summary>Containers (' +
-      n.containers.length +
-      ")</summary><div class=\"map-container-list\">" +
-      rows +
-      "</div></details>"
-    );
-  }
-
-  function shortImage(img) {
-    if (!img) return "";
-    const parts = img.split("/");
-    const last = parts[parts.length - 1];
-    return last.length > 42 ? last.slice(0, 40) + "…" : last;
-  }
-
-  function relativeTime(iso) {
-    try {
-      const d = new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z");
-      const sec = (Date.now() - d.getTime()) / 1000;
-      if (sec < 60) return "just now";
-      if (sec < 3600) return Math.floor(sec / 60) + "m ago";
-      if (sec < 86400) return Math.floor(sec / 3600) + "h ago";
-      return Math.floor(sec / 86400) + "d ago";
-    } catch {
-      return iso;
-    }
   }
 
   function escapeHtml(s) {
