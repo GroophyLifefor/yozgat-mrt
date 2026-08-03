@@ -14,6 +14,7 @@
   const ENV_PAD = 24;
   const ENV_HEADER = 36;
   const ENV_GAP = 40;
+  const PROJ_LEFT = 40;
   const PROJ_PAD = 20;
   const PROJ_HEADER = 42;
   const PROJ_GAP = 56;
@@ -134,7 +135,7 @@
             const p = l.positions.get(n.__scope + n.id);
             if (!p) continue;
             this.positions.set(n.__scope + n.id, {
-              x: proj.left + envX + p.x,
+              x: PROJ_LEFT + envX + p.x,
               y: projTop + l.top + p.y,
               w: p.w,
               h: p.h,
@@ -145,7 +146,7 @@
           envX += l.width + ENV_GAP;
         }
 
-        projects.push({ left: 40, top: projTop, width, height, envs, source: project });
+        projects.push({ left: PROJ_LEFT, top: projTop, width, height, envs, source: project });
         projTop += height + PROJ_GAP;
       }
 
