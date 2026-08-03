@@ -789,8 +789,8 @@
         btn.textContent = "Starting…";
 
         const { res, data } = await apiJson(
-          "/projects/" + projectId + "/environments/" + envId + "/deployments",
-          { method: "POST", body: JSON.stringify({ commitHash: resolvedCommit }) }
+          "/projects/" + projectId + "/deployments",
+          { method: "POST", body: JSON.stringify({ environmentId: envId, commitHash: resolvedCommit }) }
         );
 
         btn.disabled = false;

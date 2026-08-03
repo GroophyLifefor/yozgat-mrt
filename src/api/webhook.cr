@@ -6,7 +6,7 @@ module Yozgat
     module Webhook
       def self.deploy(env)
         project_id = Projects.parse_id(env)
-        env_slug = env.params.url["env_slug"]?.try(&.strip) || ""
+        env_slug = env.params.url["env_id"]?.try(&.strip) || ""
 
         return env.status(400).json({error: "invalid project id"}) unless project_id
         unless !env_slug.empty? && DB::Environments.slug_ok?(env_slug)
@@ -101,13 +101,13 @@ end
 
 # ── Route (raw body — not via api macro) ────────────────────────
 
-post "/projects/:id/environments/:env_slug/deploy" do |env|
+post "/projects/:id/environments/:env_id/deploy" do |env|
   Yozgat::API::Webhook.deploy(env)
 end
 
 Yozgat::OpenApi.register(
   method: "post",
-  path: "/projects/:id/environments/:env_slug/deploy",
+  path: "/projects/:id/environments/:env_id/deploy",
   summary: "Webhook-triggered deploy for an environment",
   tags: ["webhooks"],
   security: [] of String,

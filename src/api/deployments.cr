@@ -43,7 +43,22 @@ module Yozgat
         env_id = Projects.parse_id(env, "env_id")
         return env.status(400).json({error: "invalid project or environment id"}) unless project_id && env_id
 
-        commit_hash = body.commitHash.strip
+        run_create(env, project_id, env_id, body.commitHash)
+      end
+
+      def self.create_for_project(env, body : CreateProjectDeploymentBody)
+        return unless Projects.require_auth(env)
+        project_id = Projects.parse_id(env)
+        return env.status(400).json({error: "invalid project id"}) unless project_id
+
+        env_id = body.environmentId.to_i64
+        return env.status(400).json({error: "invalid environment id"}) if env_id <= 0
+
+        run_create(env, project_id, env_id, body.commitHash)
+      end
+
+      private def self.run_create(env, project_id : Int64, env_id : Int64, commit_hash : String)
+        commit_hash = commit_hash.strip
         return env.status(400).json({error: "invalid commit hash"}) unless DB::Deployments.commit_hash_ok?(commit_hash)
 
         begin
@@ -89,6 +104,11 @@ end
 # ── Schemas ─────────────────────────────────────────────────────
 
 Ata.object CreateDeploymentBody do
+  string :commitHash, min: 7
+end
+
+Ata.object CreateProjectDeploymentBody do
+  int :environmentId, gt: 0
   string :commitHash, min: 7
 end
 
@@ -152,6 +172,15 @@ api :get, "/projects/:id/deployments",
   security: ["bearer_auth"],
   responses: {200 => DeploymentProjectListResponse, 400 => ErrorBody, 401 => ErrorBody, 404 => ErrorBody} do
   Yozgat::API::Deployments.list_for_project(env)
+end
+
+api :post, "/projects/:id/deployments",
+  body: CreateProjectDeploymentBody,
+  summary: "Trigger a deployment for an environment",
+  tags: ["deployments"],
+  security: ["bearer_auth"],
+  responses: {200 => DeploymentResponse, 400 => ErrorBody, 401 => ErrorBody, 404 => ErrorBody} do
+  Yozgat::API::Deployments.create_for_project(env, body)
 end
 
 api :get, "/projects/:id/environments/:env_id/deployments",
