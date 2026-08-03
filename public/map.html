@@ -169,23 +169,26 @@
         map.setLoading(true);
         setStatus("Loading…");
 
-        const { res, data } = await apiJson("/projects/" + pid + "/environments/" + eid + "/topology");
-        map.setLoading(false);
+        try {
+          const { res, data } = await apiJson("/projects/" + pid + "/environments/" + eid + "/topology");
 
-        if (!res.ok) {
-          setStatus((data && data.error) || "Could not load topology");
-          map.setData([], []);
-          return;
+          if (!res.ok) {
+            setStatus((data && data.error) || "Could not load topology");
+            map.setData([], []);
+            return;
+          }
+
+          const topo = (data && data.topology) || {};
+          map.setData(topo.nodes || [], topo.edges || []);
+
+          const slug = topo.deploymentSlug || "none";
+          const updated = topo.updatedAt ? formatDate(topo.updatedAt) : "—";
+          setStatus("Deployment " + slug + " · updated " + updated);
+
+          pollTimer = setInterval(refreshStats, 15000);
+        } finally {
+          map.setLoading(false);
         }
-
-        const topo = (data && data.topology) || {};
-        map.setData(topo.nodes || [], topo.edges || []);
-
-        const slug = topo.deploymentSlug || "none";
-        const updated = topo.updatedAt ? formatDate(topo.updatedAt) : "—";
-        setStatus("Deployment " + slug + " · updated " + updated);
-
-        pollTimer = setInterval(refreshStats, 15000);
       }
 
       async function refreshStats() {

@@ -82,7 +82,10 @@
     }
 
     setLoading(on) {
-      if (this.loadingEl) this.loadingEl.hidden = !on;
+      const el = this.loadingEl || document.getElementById("map-loading");
+      if (!el) return;
+      el.hidden = !on;
+      el.style.display = on ? "flex" : "none";
     }
 
     autoLayout() {

@@ -393,6 +393,11 @@ body.map-app {
   font-size: .9rem;
 }
 
+.map-loading[hidden],
+.map-empty[hidden] {
+  display: none !important;
+}
+
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
