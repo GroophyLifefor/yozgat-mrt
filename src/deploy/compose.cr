@@ -5,11 +5,11 @@ module Yozgat
     module Compose
       def self.execute!(ctx : Context) : Nil
         project = DB::Projects.deploy_source(ctx.project_id)
-        domains = DB::Domains.list(ctx.project_id, ctx.environment_id)
+        domains = DB::Domains.list_deploy(ctx.project_id, ctx.environment_id)
+        domain_names = domains.map { |d| d[:domainName] }
+        has_domains = !domains.empty?
 
-        unless domains.empty?
-          raise "Custom domains require Traefik (P13); use port-only deploy for now"
-        end
+        Yozgat::Traefik.ensure_if_needed! if has_domains
 
         Yozgat::Deploy.prepare_dirs!(ctx)
         base = Yozgat::Config.base_dir
@@ -17,6 +17,8 @@ module Yozgat
         deploy_dir = Paths.deployment_dir(ctx.project_id, ctx.env_slug, ctx.deployment_slug)
         repo_dir = Paths.repo_dir(ctx.project_id, ctx.env_slug, ctx.deployment_slug)
         log_path = Paths.deploy_log_path(ctx.project_id, ctx.env_slug, ctx.deployment_slug)
+
+        old_deploy_dir = Current.read_deployment_dir(env_dir)
 
         DB::Deployments.update_project_status!(ctx.project_id, "deploying")
         DB::Deployments.update_status!(ctx.deployment_id, "cloning")
@@ -33,7 +35,7 @@ module Yozgat
         compose_path = detect_compose_file!(repo_dir)
         Logs.write_line(log_path, "using compose file #{compose_relative(repo_dir, compose_path)}")
         Logs.write_line(log_path, "validating docker compose configuration")
-        validate_compose!(compose_path, has_domains: false)
+        validate_compose!(compose_path, has_domains: has_domains, domain_names: domain_names)
         Logs.write_line(log_path, "compose validation passed")
 
         DB::Deployments.update_status!(ctx.deployment_id, "starting")
@@ -55,6 +57,12 @@ module Yozgat
 
         Current.update(env_dir, ctx.deployment_slug)
         Logs.write_line(log_path, "updated current pointer")
+
+        if has_domains && old_deploy_dir && old_deploy_dir != deploy_dir
+          Logs.write_line(log_path, "stopping previous deployment")
+          stop_previous!(ctx, old_deploy_dir, log_path)
+        end
+
         Logs.write_line(log_path, "deployment completed successfully")
       end
 
@@ -63,7 +71,7 @@ module Yozgat
           raise "docker-compose.yml or docker-compose.yaml not found at repository root"
       end
 
-      def self.validate_compose!(compose_path : String, has_domains : Bool) : Nil
+      def self.validate_compose!(compose_path : String, has_domains : Bool, domain_names : Array(String) = [] of String) : Nil
         content = File.read(compose_path)
         doc = YAML.parse(content)
 
@@ -71,9 +79,9 @@ module Yozgat
         service_map = services.try(&.as_h)
         raise "compose file must define a top-level 'services' mapping" unless service_map && !service_map.empty?
 
-        return unless has_domains
-
-        raise "Custom domains require Traefik labels in compose (P13)"
+        if has_domains
+          ComposeValidate.validate_traefik!(compose_path, domain_names)
+        end
       end
 
       private def self.compose_relative(repo_dir : String, compose_path : String) : String
@@ -82,6 +90,16 @@ module Yozgat
           return rest unless rest.empty?
         end
         File.basename(compose_path)
+      end
+
+      private def self.stop_previous!(ctx : Context, old_deploy_dir : String, log_path : String) : Nil
+        compose = Dockerfile.detect_compose_file(File.join(old_deploy_dir, "repo"))
+        return unless compose && File.exists?(compose)
+
+        Docker.compose_down(Yozgat::Config.base_dir, old_deploy_dir, compose)
+        slug = File.basename(old_deploy_dir)
+        DB::Deployments.stop_by_slug!(ctx.project_id, ctx.environment_id, slug)
+        Logs.write_line(log_path, "previous deployment stopped")
       end
     end
   end

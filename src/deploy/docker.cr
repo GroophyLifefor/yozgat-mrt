@@ -136,7 +136,7 @@ module Yozgat
         false
       end
 
-      private def self.docker_env(base_dir : String, project_dir : String? = nil) : Hash(String, String)
+      def self.docker_env(base_dir : String, project_dir : String? = nil) : Hash(String, String)
         Yozgat::Deploy.ensure_runtime_dirs!
         Dir.mkdir_p(File.join(project_dir, "tmp")) if project_dir
         ENV.to_h.merge({

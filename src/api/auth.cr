@@ -20,6 +20,11 @@ module Yozgat
 
         hash = Yozgat::Auth.hash_password(password)
         if (id = Yozgat::DB.create_admin(email, hash))
+          begin
+            Yozgat::Traefik.ensure_with_email!(email)
+          rescue ex
+            puts "[yozgat] traefik setup warning: #{ex.message}"
+          end
           issue_session(env, id, email, "admin")
         else
           env.status(409).json({error: "an admin account already exists"})

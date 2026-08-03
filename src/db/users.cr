@@ -45,6 +45,13 @@ module Yozgat
       result.rows_affected == 1 ? result.last_insert_id : nil
     end
 
+    def self.first_admin_email : String?
+      database.query_one?(
+        "SELECT email FROM users ORDER BY id ASC LIMIT 1",
+        as: String,
+      )
+    end
+
     private def self.read_user(rs : ::DB::ResultSet) : UserRow
       {
         id:            rs.read(Int64),

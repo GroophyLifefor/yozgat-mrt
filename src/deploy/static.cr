@@ -7,11 +7,10 @@ module Yozgat
 
       def self.execute!(ctx : Context) : Nil
         project = DB::Projects.deploy_source(ctx.project_id)
-        domains = DB::Domains.list(ctx.project_id, ctx.environment_id)
+        domains = DB::Domains.list_deploy(ctx.project_id, ctx.environment_id)
+        port_only = domains.empty?
 
-        unless domains.empty?
-          raise "Custom domains require Traefik (P13); use port-only deploy for now"
-        end
+        Yozgat::Traefik.ensure_if_needed! unless port_only
 
         Yozgat::Deploy.prepare_dirs!(ctx)
         base = Yozgat::Config.base_dir
@@ -37,20 +36,25 @@ module Yozgat
 
         DB::Deployments.update_status!(ctx.deployment_id, "starting")
         Logs.write_line(log_path, "generating docker compose file")
-        Logs.write_line(log_path, "no domains configured; exposing on host port #{ctx.assigned_port}")
+
+        if port_only
+          Logs.write_line(log_path, "no domains configured; exposing on host port #{ctx.assigned_port}")
+        else
+          Logs.write_line(log_path, "domains configured; routing via Traefik")
+        end
 
         compose_yaml = generate_compose(
           project_id: ctx.project_id,
           env_slug: ctx.env_slug,
           deployment_slug: ctx.deployment_slug,
           repo_dir: repo_dir,
-          domains: [] of DomainInput,
+          domains: domains,
           host_port: ctx.assigned_port,
           router_name: Yozgat::Deploy.router_name(ctx.project_id, ctx.environment_id),
         )
         File.write(compose_path, compose_yaml)
 
-        if old_deploy_dir && old_deploy_dir != deploy_dir
+        if port_only && old_deploy_dir && old_deploy_dir != deploy_dir
           Logs.write_line(log_path, "port-only redeploy: stopping previous deployment before start")
           stop_previous!(ctx, old_deploy_dir, log_path)
         end
@@ -73,6 +77,12 @@ module Yozgat
 
         Current.update(env_dir, ctx.deployment_slug)
         Logs.write_line(log_path, "updated current pointer")
+
+        if !port_only && old_deploy_dir && old_deploy_dir != deploy_dir
+          Logs.write_line(log_path, "stopping previous deployment")
+          stop_previous!(ctx, old_deploy_dir, log_path)
+        end
+
         Logs.write_line(log_path, "deployment completed successfully")
       end
 

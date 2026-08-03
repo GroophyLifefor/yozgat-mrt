@@ -3,13 +3,17 @@ require "yaml"
 module Yozgat
   module Deploy
     module Dockerfile
+      COMPOSE_MISSING_WITH_DOMAINS = "Dockerfile detected, but no docker-compose.yml in the repo. " \
+                                     "When domains are configured, commit a docker-compose.yml with Traefik labels at the repo root."
+
       def self.execute!(ctx : Context) : Nil
         project = DB::Projects.deploy_source(ctx.project_id)
-        domains = DB::Domains.list(ctx.project_id, ctx.environment_id)
+        domains = DB::Domains.list_deploy(ctx.project_id, ctx.environment_id)
+        domain_names = domains.map { |d| d[:domainName] }
+        has_domains = !domains.empty?
+        port_only = !has_domains
 
-        unless domains.empty?
-          raise "Custom domains require Traefik (P13); use port-only deploy for now"
-        end
+        Yozgat::Traefik.ensure_if_needed! if has_domains
 
         Yozgat::Deploy.prepare_dirs!(ctx)
         base = Yozgat::Config.base_dir
@@ -40,17 +44,20 @@ module Yozgat
         compose_path = if path = user_compose
                          Logs.write_line(log_path, "using compose file #{compose_relative(repo_dir, path)}")
                          Logs.write_line(log_path, "validating docker compose configuration")
-                         validate_compose!(path, has_domains: false)
+                         validate_compose!(path, has_domains: has_domains, domain_names: domain_names)
                          Logs.write_line(log_path, "compose validation passed")
                          path
                        else
+                         if has_domains
+                           raise COMPOSE_MISSING_WITH_DOMAINS
+                         end
                          generated = File.join(deploy_dir, "docker-compose.yml")
                          Logs.write_line(log_path, "no compose file in repo; generating docker-compose.yml")
                          File.write(generated, generate_auto_compose(ctx))
                          generated
                        end
 
-        if old_deploy_dir && old_deploy_dir != deploy_dir
+        if port_only && old_deploy_dir && old_deploy_dir != deploy_dir
           Logs.write_line(log_path, "port-only redeploy: stopping previous deployment before start")
           stop_previous!(ctx, old_deploy_dir, log_path)
         end
@@ -74,6 +81,12 @@ module Yozgat
 
         Current.update(env_dir, ctx.deployment_slug)
         Logs.write_line(log_path, "updated current pointer")
+
+        if has_domains && old_deploy_dir && old_deploy_dir != deploy_dir
+          Logs.write_line(log_path, "stopping previous deployment")
+          stop_previous!(ctx, old_deploy_dir, log_path)
+        end
+
         Logs.write_line(log_path, "deployment completed successfully")
       end
 
@@ -91,7 +104,7 @@ module Yozgat
         nil
       end
 
-      def self.validate_compose!(compose_path : String, has_domains : Bool) : Nil
+      def self.validate_compose!(compose_path : String, has_domains : Bool, domain_names : Array(String) = [] of String) : Nil
         content = File.read(compose_path)
         doc = YAML.parse(content)
 
@@ -105,14 +118,14 @@ module Yozgat
         end
 
         if has_domains
-          raise "Custom domains require Traefik labels in compose (P13)"
+          ComposeValidate.validate_traefik!(compose_path, domain_names)
+        else
+          has_ports = service_map.values.any? do |service|
+            ports = service["ports"]?
+            ports ? !ports_empty?(ports) : false
+          end
+          raise "compose file must define at least one service with a 'ports' mapping when no domains are configured" unless has_ports
         end
-
-        has_ports = service_map.values.any? do |service|
-          ports = service["ports"]?
-          ports ? !ports_empty?(ports) : false
-        end
-        raise "compose file must define at least one service with a 'ports' mapping when no domains are configured" unless has_ports
       end
 
       def self.generate_auto_compose(ctx : Context) : String

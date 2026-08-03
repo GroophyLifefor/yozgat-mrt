@@ -36,6 +36,8 @@
       let activeDeployment = null;
       let resolvedCommit = null;
       let deployments = [];
+      let domains = [];
+      let domainsEnvId = null;
 
       (async function () {
         if (!projectId) {
@@ -115,6 +117,62 @@
         renderDeployments();
         renderDeploy();
         updateLiveBanner();
+      }
+
+      function defaultEnvId() {
+        if (!environments.length) return null;
+        const prod = environments.find((e) => e.slug === "prod");
+        return prod ? prod.id : environments[0].id;
+      }
+
+      async function loadDomainsForEnv(envId) {
+        domainsEnvId = envId;
+        domains = [];
+        const listEl = document.getElementById("domains-list");
+        if (!listEl) return;
+        if (!envId) {
+          listEl.innerHTML = '<p class="muted">Create an environment first.</p>';
+          return;
+        }
+        listEl.innerHTML = '<p class="muted">Loading domains…</p>';
+        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/domains");
+        if (domainsEnvId !== envId) return;
+        if (!res.ok) {
+          listEl.innerHTML = '<p class="error">' + escapeHtml((data && data.error) || "Could not load domains") + "</p>";
+          return;
+        }
+        domains = (data && data.domains) || [];
+        renderDomainsList();
+      }
+
+      function renderDomainsList() {
+        const listEl = document.getElementById("domains-list");
+        if (!listEl) return;
+
+        let table = "";
+        if (domains.length) {
+          table =
+            '<div class="table-wrap"><table><thead><tr>' +
+            "<th>Domain</th><th>Port</th><th>Created</th><th></th>" +
+            "</tr></thead><tbody>";
+          for (const d of domains) {
+            table +=
+              "<tr>" +
+              '<td class="mono">' + escapeHtml(d.domainName) + "</td>" +
+              "<td>" + d.port + "</td>" +
+              "<td>" + escapeHtml(formatDate(d.createdAt)) + "</td>" +
+              '<td><button type="button" class="danger inline delete-domain" data-id="' + d.id + '">Remove</button></td>' +
+              "</tr>";
+          }
+          table += "</tbody></table></div>";
+        } else {
+          table = '<p class="muted">No custom domains yet.</p>';
+        }
+        listEl.innerHTML = table;
+
+        listEl.querySelectorAll(".delete-domain").forEach((btn) => {
+          btn.addEventListener("click", () => deleteDomain(Number(btn.dataset.id)));
+        });
       }
 
       function switchTab(name) {
@@ -242,6 +300,24 @@
           table +
           "</div>" +
           '<div class="panel">' +
+          "<h3>Custom domains</h3>" +
+          '<p class="hint">Point your domain A record to <span class="mono">' + escapeHtml(publicIp || "your server IP") + "</span>, then add it here. HTTPS is provisioned via Traefik.</p>" +
+          '<div class="field"><label for="domains-env">Environment</label><select id="domains-env">' +
+          environments.map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + " (" + escapeHtml(e.slug) + ")</option>").join("") +
+          "</select></div>" +
+          '<div id="domains-list"></div>' +
+          '<form id="domain-form" style="margin-top:1rem">' +
+          '<div class="field-row">' +
+          '<div class="field"><label for="domain-name">Domain</label><input type="text" id="domain-name" placeholder="app.example.com" required pattern="[a-zA-Z0-9.-]+"></div>' +
+          '<div class="field"><label for="domain-port">Service port</label><input type="number" id="domain-port" value="80" min="1" max="65535"></div>' +
+          "</div>" +
+          '<div class="actions">' +
+          '<button type="button" class="secondary inline" id="verify-domain">Verify DNS</button>' +
+          '<button type="submit" class="primary inline">Add domain</button>' +
+          "</div>" +
+          '<p id="domain-verify-result" class="hint"></p>' +
+          "</form></div>" +
+          '<div class="panel">' +
           "<h3>Add environment</h3>" +
           '<form id="env-form">' +
           '<div class="field-row">' +
@@ -268,6 +344,71 @@
         panel.querySelectorAll(".edit-port").forEach((btn) => {
           btn.addEventListener("click", () => editHostPort(Number(btn.dataset.id), btn.dataset.port));
         });
+
+        const domainsEnvSelect = document.getElementById("domains-env");
+        if (domainsEnvSelect) {
+          const defaultId = defaultEnvId();
+          if (defaultId) domainsEnvSelect.value = String(defaultId);
+          domainsEnvSelect.addEventListener("change", () => loadDomainsForEnv(Number(domainsEnvSelect.value)));
+          document.getElementById("domain-form").addEventListener("submit", addDomain);
+          document.getElementById("verify-domain").addEventListener("click", verifyDomain);
+          loadDomainsForEnv(Number(domainsEnvSelect.value));
+        }
+      }
+
+      async function verifyDomain() {
+        hideError();
+        const envId = Number(document.getElementById("domains-env").value);
+        const name = document.getElementById("domain-name").value.trim().toLowerCase();
+        const resultEl = document.getElementById("domain-verify-result");
+        if (!name) {
+          resultEl.textContent = "Enter a domain name first.";
+          return;
+        }
+        resultEl.textContent = "Checking DNS…";
+        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/domains/verify", {
+          method: "POST",
+          body: JSON.stringify({ domainName: name }),
+        });
+        if (res.ok && data) {
+          resultEl.textContent = "OK — A record points to " + data.expectedIp + " (found: " + (data.foundIps || []).join(", ") + ")";
+        } else {
+          resultEl.textContent = (data && data.error) || "Verification failed";
+        }
+      }
+
+      async function addDomain(ev) {
+        ev.preventDefault();
+        hideError();
+        const envId = Number(document.getElementById("domains-env").value);
+        const name = document.getElementById("domain-name").value.trim().toLowerCase();
+        const port = Number(document.getElementById("domain-port").value) || 80;
+        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/domains", {
+          method: "POST",
+          body: JSON.stringify({ domainName: name, port: port }),
+        });
+        if (res.ok) {
+          document.getElementById("domain-name").value = "";
+          document.getElementById("domain-verify-result").textContent = "";
+          await loadDomainsForEnv(envId);
+        } else {
+          showError((data && data.error) || "Could not add domain");
+        }
+      }
+
+      async function deleteDomain(domainId) {
+        if (!confirm("Remove this domain?")) return;
+        hideError();
+        const envId = Number(document.getElementById("domains-env").value);
+        const { res, data } = await apiJson(
+          "/projects/" + projectId + "/environments/" + envId + "/domains/" + domainId,
+          { method: "DELETE" }
+        );
+        if (res.ok) {
+          await loadDomainsForEnv(envId);
+        } else {
+          showError((data && data.error) || "Could not remove domain");
+        }
       }
 
       function renderDeployments() {
