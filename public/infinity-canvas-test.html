@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Infinity Canvas Test</title>
+    <style>
+      :root {
+        font: 14px system-ui, sans-serif;
+        color: #263329;
+        background: #f2f0ea;
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 10px;
+        background: #fff;
+        border-bottom: 1px solid #d7d2c8;
+      }
+
+      button {
+        padding: 6px 10px;
+        cursor: pointer;
+      }
+
+      #result {
+        margin-left: auto;
+        color: #53645a;
+      }
+
+      #viewport {
+        position: relative;
+        flex: 1;
+        overflow: hidden;
+        user-select: none;
+        cursor: grab;
+        background-color: #f8f7f3;
+        background-image:
+          linear-gradient(#e5e1d8 1px, transparent 1px),
+          linear-gradient(90deg, #e5e1d8 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+
+      #viewport.is-panning {
+        cursor: grabbing;
+      }
+
+      .infinity-canvas-content,
+      .infinity-canvas-edges {
+        position: absolute;
+        inset: 0;
+        transform-origin: 0 0;
+      }
+
+      .infinity-canvas-content {
+        pointer-events: none;
+      }
+
+      .infinity-canvas-edges {
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+      }
+
+      .infinity-canvas-edges path {
+        fill: none;
+        stroke: #8a968d;
+        stroke-width: 1.5;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+        opacity: .9;
+      }
+
+      .infinity-canvas-edges text {
+        fill: #53645a;
+        font-size: 12px;
+        paint-order: stroke;
+        stroke: #f8f7f3;
+        stroke-width: 5px;
+      }
+
+      .tp-project {
+        background: rgba(246, 244, 239, .55);
+        border: 1px solid #d7d2c8;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px #26332914;
+        pointer-events: none;
+      }
+
+      .tp-project-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 14px;
+        border-bottom: 1px solid #d7d2c8;
+      }
+
+      .tp-project-titles {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .tp-project-header strong {
+        font-size: 1.02rem;
+        font-weight: 700;
+        letter-spacing: -.01em;
+      }
+
+      .tp-project-meta {
+        font-size: .72rem;
+        color: #6b7a70;
+      }
+
+      .status-pill {
+        font-size: .68rem;
+        padding: 2px 9px;
+        border-radius: 999px;
+        background: #e6efe8;
+        color: #2f4d38;
+        font-weight: 600;
+      }
+
+      .tp-environment {
+        background: #fff;
+        border: 1px solid #c9cdc6;
+        border-radius: 8px;
+        pointer-events: none;
+      }
+
+      .tp-env-header {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        font-size: .8rem;
+        font-weight: 600;
+        border-bottom: 1px solid #e3e6df;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .tier-caption {
+        position: absolute;
+        font-size: .6rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: #8a968d;
+        text-align: center;
+        pointer-events: none;
+      }
+
+      .tp-node {
+        background: #fff;
+        border: 1px solid #c9cdc6;
+        border-radius: 6px;
+        box-shadow: 0 1px 4px #26332910;
+        padding: 10px 12px;
+        box-sizing: border-box;
+        pointer-events: auto;
+        user-select: none;
+      }
+
+      .tp-node.external {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 6px;
+        background: #f4f6f3;
+      }
+
+      .tp-node-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .tp-node-title {
+        font-weight: 600;
+        font-size: .82rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .tp-node.external .tp-node-title {
+        font-size: .78rem;
+      }
+
+      .tp-node-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 18px;
+        line-height: 1;
+        color: #6b7a70;
+        margin-bottom: 2px;
+      }
+
+      .health-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 4px;
+      }
+
+      .health-dot.ok { background: #2f9e63; }
+      .health-dot.warn { background: #d99a1b; }
+      .health-dot.bad { background: #d64545; }
+
+      .tp-node-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+
+      .tp-chip {
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        border: 1px solid #d7d2c8;
+        color: #6b7a70;
+      }
+
+      .tp-chip.status-running { color: #2f9e63; }
+      .tp-chip.status-stopped { color: #8a968d; }
+      .tp-chip.status-starting { color: #d99a1b; }
+      .tp-chip.status-error { color: #d64545; }
+
+      .tp-meter {
+        margin-top: 5px;
+      }
+
+      .tp-meter-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: .62rem;
+        color: #8a968d;
+        margin-bottom: 2px;
+      }
+
+      .tp-meter-bar {
+        height: 4px;
+        background: #e9ece6;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+
+      .tp-meter-fill {
+        height: 100%;
+        background: #2f4d38;
+        border-radius: 999px;
+      }
+
+      .tp-meter-fill.warn { background: #d99a1b; }
+      .tp-meter-fill.bad { background: #d64545; }
+
+      .tp-node-ports {
+        margin-top: 6px;
+        font-size: .62rem;
+        color: #8a968d;
+        font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      #minimap {
+        position: absolute;
+        right: 16px;
+        bottom: 16px;
+        z-index: 10;
+        width: 190px;
+        height: 120px;
+        overflow: hidden;
+        background: #fffffff2;
+        border: 1px solid #b8bdb7;
+        box-shadow: 0 2px 8px #26332918;
+        cursor: pointer;
+      }
+
+      .minimap-box,
+      .minimap-node,
+      .minimap-viewport {
+        position: absolute;
+        box-sizing: border-box;
+      }
+
+      .minimap-box {
+        background: #dbe8dc;
+        border: 1px solid #607d68;
+      }
+
+      .minimap-node {
+        background: #839188;
+      }
+
+      .minimap-viewport {
+        border: 2px solid #2f4d38;
+        background: #2f4d3818;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <button id="fit">Fit</button>
+      <button id="reset">Reset</button>
+      <button id="destroy">Destroy listeners</button>
+      <span>Drag empty space · wheel to zoom · click minimap to move</span>
+      <span id="result">Not tested</span>
+    </header>
+    <main id="viewport">
+      <div id="minimap"></div>
+    </main>
+
+    <script src="./infinity-canvas.js"></script>
+    <script src="./infinity-canvas-renderer.js"></script>
+    <script>
+      const viewport = document.getElementById("viewport");
+      const canvas = new InfinityCanvas(viewport, {
+        minimap: document.getElementById("minimap")
+      });
+
+      const renderer = new TopologyRenderer(canvas);
+      renderer.render(MOCK_TOPOLOGY);
+
+      document.getElementById("fit").onclick = () => canvas.fit();
+      document.getElementById("reset").onclick = () => {
+        canvas.setTransform({ x: 0, y: 0, scale: 1 });
+        canvas.fit();
+      };
+      document.getElementById("destroy").onclick = (event) => {
+        canvas.destroy();
+        event.target.disabled = true;
+        document.getElementById("result").textContent = "Listeners destroyed";
+      };
+
+      function assert(condition, message) {
+        if (!condition) throw new Error(message);
+      }
+
+      try {
+        assert(canvas.nodes.size === 18, "expected eighteen topology nodes");
+        assert(canvas.edgeList.length === 9, "expected nine topology edges");
+        assert(canvas.nodes.get("project-1").element.parentElement === canvas.content,
+          "project was not placed on the canvas");
+        assert(canvas.nodes.get("project-1-environment-101").element.parentElement ===
+          canvas.nodes.get("project-1").element,
+          "environment was not placed inside its project");
+        const apiNode = canvas.nodes.get("project-1-environment-101-node-service:api");
+        assert(apiNode.element.parentElement ===
+          canvas.nodes.get("project-1-environment-101").element,
+          "service was not placed inside its environment");
+        assert(apiNode.element.querySelector(".tp-chip.status-running"),
+          "service card is missing its status chip");
+        document.getElementById("result").textContent = "Basic checks passed";
+      } catch (error) {
+        document.getElementById("result").textContent = "FAILED: " + error.message;
+        console.error(error);
+      }
+    </script>
+  </body>
+</html>

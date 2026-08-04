@@ -54,71 +54,8 @@
     </div>
 
     <script src="/app.js"></script>
+    <script src="/infinity-canvas.js"></script>
+    <script src="/infinity-canvas-renderer.js"></script>
     <script src="/map.js"></script>
-    <script>
-      const map = new YozgatMap(document.getElementById("map-root"));
-      let projects = [];
-      let pollTimer = null;
-
-      (async function () {
-        const user = await requireAuth();
-        if (!user) return;
-        document.getElementById("sidebar-user").textContent = user.email;
-        document.getElementById("logout").addEventListener("click", logout);
-
-        bindControls();
-        await loadTopology();
-      })();
-
-      function bindControls() {
-        document.getElementById("btn-refresh").addEventListener("click", loadTopology);
-        document.getElementById("btn-fit").addEventListener("click", () => map.fitView());
-        document.getElementById("map-search").addEventListener("input", (e) => {
-          map.setSearch(e.target.value);
-        });
-      }
-
-      async function loadTopology() {
-        if (pollTimer) clearInterval(pollTimer);
-        map.setLoading(true);
-        setStatus("Loading…");
-
-        try {
-          const { res, data } = await apiJson("/topology");
-
-          if (!res.ok) {
-            setStatus((data && data.error) || "Could not load topology");
-            map.setHierarchy([]);
-            return;
-          }
-
-          projects = (data && data.topology && data.topology.projects) || [];
-          map.setHierarchy(projects);
-          updateStatus();
-
-          pollTimer = setInterval(refreshTopology, 15000);
-        } finally {
-          map.setLoading(false);
-        }
-      }
-
-      async function refreshTopology() {
-        const { res, data } = await apiJson("/topology");
-        if (!res.ok || !data || !data.topology) return;
-
-        projects = data.topology.projects || [];
-        map.updateHierarchy(projects);
-        updateStatus();
-      }
-
-      function updateStatus() {
-        const envCount = projects.reduce((n, p) => n + (p.environments ? p.environments.length : 0), 0);
-        setStatus(projects.length + " projects · " + envCount + " environments");
-      }
-
-      function setStatus(msg) {
-        document.getElementById("map-status").textContent = msg;
-      }
-    </script>
   </body>
 </html>

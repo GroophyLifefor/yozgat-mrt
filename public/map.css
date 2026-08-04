@@ -169,6 +169,17 @@ body.map-app {
   stroke: var(--border-strong);
   stroke-width: 1.25;
   opacity: .85;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.map-edges text {
+  font-size: 10px;
+  fill: var(--muted);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 5px;
+  stroke-linejoin: round;
 }
 
 .map-edges path.highlight {
@@ -543,6 +554,221 @@ body.map-app {
 .map-loading[hidden],
 .map-empty[hidden] {
   display: none !important;
+}
+
+/* ---- Infinity canvas renderer (tp-*) ---- */
+
+.tp-project {
+  background: rgba(246, 244, 239, .55);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.tp-project.is-dimmed { opacity: .35; }
+
+.tp-project-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tp-project-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tp-project-header strong {
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+.tp-project-meta {
+  font-size: .72rem;
+  color: var(--muted);
+}
+
+.tp-environment {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.tp-environment.is-dimmed { opacity: .3; }
+
+.tp-env-header {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: .8rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tier-caption {
+  position: absolute;
+  font-size: .6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  text-align: center;
+  pointer-events: none;
+}
+
+.tp-node {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  box-sizing: border-box;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.tp-node.is-dimmed { opacity: .35; }
+
+.tp-node.external {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6px;
+  background: var(--surface-2);
+}
+
+.tp-node-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.tp-node-title {
+  font-weight: 600;
+  font-size: .82rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tp-node.external .tp-node-title {
+  font-size: .78rem;
+}
+
+.tp-node-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.health-dot.ok { background: var(--success); }
+.health-dot.warn { background: var(--warning); }
+.health-dot.bad { background: var(--danger); }
+
+.tp-node-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tp-chip {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.tp-chip.status-running { color: var(--success); }
+.tp-chip.status-stopped { color: var(--muted); }
+.tp-chip.status-starting { color: var(--warning); }
+.tp-chip.status-error { color: var(--danger); }
+
+.tp-meter {
+  margin-top: 5px;
+}
+
+.tp-meter-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: .62rem;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.tp-meter-bar {
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.tp-meter-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 999px;
+}
+
+.tp-meter-fill.warn { background: var(--warning); }
+.tp-meter-fill.bad { background: var(--danger); }
+
+.tp-node-ports {
+  margin-top: 6px;
+  font-size: .62rem;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Infinity canvas minimap markers */
+
+.minimap-box,
+.minimap-node,
+.minimap-viewport {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.minimap-box {
+  background: rgba(47, 77, 56, .05);
+  border: 1px solid var(--border);
+}
+
+.minimap-node {
+  background: var(--border-strong);
+}
+
+.minimap-viewport {
+  border: 1.5px solid var(--primary);
+  background: rgba(47, 77, 56, .08);
 }
 
 @media (max-width: 900px) {
