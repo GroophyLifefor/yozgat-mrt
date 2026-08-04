@@ -9,17 +9,18 @@
 (function () {
   const NODE_W = 240;
   const NODE_H = 148;
-  const GAP_X = 48;
-  const GAP_Y = 16;
+  const GAP_X = 56;
+  const GAP_Y = 28;
   const EXTERNAL_W = 150;
   const EXTERNAL_H = 64;
-  const ENV_PAD = 16;
+  const ENV_PAD = 24;
   const ENV_HEADER = 32;
+  const CAPTION_H = 14;
   const ENV_GAP = 32;
   const PROJ_LEFT = 24;
-  const PROJ_PAD = 16;
-  const PROJ_HEADER = 40;
-  const PROJ_GAP = 48;
+  const PROJ_PAD = 20;
+  const PROJ_HEADER = 60;
+  const PROJ_GAP = 56;
 
   const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -56,6 +57,18 @@
     return "Internal Network";
   }
 
+  function tierCaption(tier) {
+    if (tier == null || tier <= 0) return "";
+    if (tier === 1) return "Proxy";
+    if (tier === 4) return "Data";
+    return "Services";
+  }
+
+  function needsDot(h) {
+    const s = (h || "").toLowerCase();
+    return s === "warning" || s === "warn" || s === "error" || s === "bad";
+  }
+
   // Orthogonal route between two points. Left-to-right edges bend at the
   // midpoint horizontally; backwards edges bend vertically instead.
   function orthogonalPoints(x1, y1, x2, y2) {
@@ -87,6 +100,7 @@
       this.projects = [];
       this.layout = null; // { projects: [{ left, top, width, height, envs: [...] }] }
       this.positions = new Map();
+      this.measuredHeights = new Map();
       this.projectRects = [];
       this.envRects = [];
       this.globalEdges = [];
@@ -128,6 +142,9 @@
     setHierarchy(projects) {
       this.projects = projects || [];
       this.computeLayout();
+      this.renderNodes();
+      this.measureHeights();
+      this.computeLayout();
       this.render();
     }
 
@@ -135,8 +152,22 @@
       this.projects = projects || [];
       this.computeLayout();
       this.renderNodes();
+      this.measureHeights();
+      this.computeLayout();
+      this.renderNodes();
       this.drawEdges();
       this.drawMinimap();
+    }
+
+    // After a first render pass, read the real content height of every
+    // rendered card so the second layout pass uses measured heights instead
+    // of the fixed NODE_H estimate (cards are content-driven).
+    measureHeights() {
+      this.measuredHeights.clear();
+      for (const node of this.nodesLayer.querySelectorAll(".map-node")) {
+        const id = node.dataset.id;
+        if (id) this.measuredHeights.set(id, node.offsetHeight);
+      }
     }
 
     setLoading(on) {
@@ -210,7 +241,9 @@
 
     // Layout one environment as a horizontal execution flow. Tiers become
     // columns ordered left-to-right (0=Internet, 1=Proxy, 2/3=Services,
-    // 4=Databases); nodes inside a column stack vertically.
+    // 4=Databases); nodes inside a column stack vertically. Columns are
+    // vertically centered within the tallest column so the Internet card
+    // sits beside the service stack instead of leaving a lower-left void.
     layoutEnv(project, env) {
       const prefix = "p" + project.id + "e" + env.id + ":";
       const nodes = (env.nodes || []).slice();
@@ -237,25 +270,44 @@
 
       const tiers = Array.from(byTier.keys()).sort((a, b) => a - b);
       const positions = new Map();
-      let x = ENV_PAD;
-      let envW = ENV_PAD;
-      let maxColH = ENV_HEADER;
+      const colHeights = new Map();
+      const colWidths = new Map();
 
       for (const tier of tiers) {
         const col = byTier.get(tier);
         col.sort((a, b) => a.name.localeCompare(b.name));
         let colW = 0;
-        let y = ENV_HEADER;
-
+        let colH = 0;
         for (const n of col) {
           const w = n.kind === "external" ? EXTERNAL_W : NODE_W;
-          const h = n.kind === "external" ? EXTERNAL_H : NODE_H;
-          positions.set(prefix + n.id, { x, y, w, h });
+          const h = this.cardHeight(n, prefix);
           colW = Math.max(colW, w);
+          colH += h + GAP_Y;
+        }
+        colHeights.set(tier, Math.max(0, colH - GAP_Y));
+        colWidths.set(tier, colW);
+      }
+
+      let maxColH = 0;
+      for (const h of colHeights.values()) maxColH = Math.max(maxColH, h);
+      const yBase = ENV_HEADER + CAPTION_H;
+
+      let x = ENV_PAD;
+      let envW = ENV_PAD;
+      const tierCols = [];
+      for (const tier of tiers) {
+        const col = byTier.get(tier);
+        const colW = colWidths.get(tier);
+        const colH = colHeights.get(tier);
+        const yOff = (maxColH - colH) / 2;
+        let y = yBase + yOff;
+        for (const n of col) {
+          const w = n.kind === "external" ? EXTERNAL_W : NODE_W;
+          const h = this.cardHeight(n, prefix);
+          positions.set(prefix + n.id, { x, y, w, h });
           y += h + GAP_Y;
         }
-
-        maxColH = Math.max(maxColH, y - GAP_Y + ENV_PAD);
+        tierCols.push({ tier, x, w: colW, top: yBase + yOff });
         envW = x + colW;
         x += colW + GAP_X;
       }
@@ -265,10 +317,19 @@
         prefix,
         nodes,
         edges,
+        tierCols,
         positions,
         width: Math.max(envW + ENV_PAD, ENV_PAD * 2 + 120),
-        height: Math.max(maxColH, ENV_HEADER + 24),
+        height: Math.max(yBase + maxColH + ENV_PAD, ENV_HEADER + CAPTION_H + 24),
       };
+    }
+
+    // Height of a single card: measured value when available, otherwise the
+    // fixed estimate for the node kind.
+    cardHeight(n, prefix) {
+      const measured = this.measuredHeights.get(prefix + n.id);
+      if (measured != null) return measured;
+      return n.kind === "external" ? EXTERNAL_H : NODE_H;
     }
 
     fitView() {
@@ -355,10 +416,20 @@
       el.style.height = proj.height + "px";
 
       const source = proj.source;
+      const envCount = proj.envs.length;
+      const meta = source
+        ? '<div class="map-project-meta">' +
+          escapeHtml(envCount + (envCount === 1 ? " environment" : " environments")) +
+          (source.projectType ? " · " + escapeHtml(source.projectType) : "") +
+          "</div>"
+        : "";
       const header = document.createElement("div");
       header.className = "map-project-header";
       header.innerHTML =
+        '<div class="map-project-titles">' +
         "<strong>" + escapeHtml(source ? source.name : "Project") + "</strong>" +
+        meta +
+        "</div>" +
         (source
           ? '<span class="status-pill ' + statusClass(source.status) + '">' + escapeHtml(source.status) + "</span>"
           : "");
@@ -440,7 +511,9 @@
         '<div class="map-node-card">' +
         '<div class="map-node-header">' +
         '<div class="map-node-title">' + escapeHtml(n.name) + "</div>" +
-        '<span class="health-dot ' + healthClass(n.health) + '" title="' + escapeHtml(n.health || "") + '"></span>' +
+        (needsDot(n.health)
+          ? '<span class="health-dot ' + healthClass(n.health) + '" title="' + escapeHtml(n.health || "") + '"></span>'
+          : "") +
         "</div>" +
         '<div class="map-node-meta">' +
         '<span class="map-chip ' + statusChipClass(n.status) + '">' + escapeHtml(n.status) + "</span>" +
@@ -516,6 +589,19 @@
             }
           }
 
+          // Tier captions above each column (Proxy / Services / Data).
+          for (const tc of env.tierCols || []) {
+            const label = tierCaption(tc.tier);
+            if (!label) continue;
+            const text = document.createElementNS(SVG_NS, "text");
+            text.setAttribute("class", "map-tier-caption");
+            text.setAttribute("x", tc.x + tc.w / 2);
+            text.setAttribute("y", Math.max(9, tc.top - 7));
+            text.setAttribute("text-anchor", "middle");
+            text.textContent = label;
+            svg.appendChild(text);
+          }
+
           for (const edge of env.edges) {
             const from = env.positions.get(edge.from);
             const to = env.positions.get(edge.to);
@@ -539,14 +625,21 @@
             }
             svg.appendChild(path);
 
-            // Label the important connections above the elbow.
-            const midX = x1 + (x2 - x1) / 2;
-            const midY = y1 + (y2 - y1) / 2;
+            // Label above the horizontal run for forward edges; beside the
+            // vertical run for backwards edges. Skip when the run is too
+            // short for the label to fit.
+            const run = x2 - x1;
+            if (run < 48 && run >= 0) continue;
             const text = document.createElementNS(SVG_NS, "text");
             text.setAttribute("class", "map-edge-label");
-            text.setAttribute("x", midX);
-            text.setAttribute("y", Math.max(8, midY - 5));
             text.setAttribute("text-anchor", "middle");
+            if (run >= 0) {
+              text.setAttribute("x", x1 + Math.min(run / 2, 44));
+              text.setAttribute("y", Math.max(9, y1 - 6));
+            } else {
+              text.setAttribute("x", x1 + (x2 - x1) / 2);
+              text.setAttribute("y", Math.max(9, y1 + (y2 - y1) / 2 - 5));
+            }
             text.textContent = edgeLabel(edge.kind);
             svg.appendChild(text);
           }
@@ -626,8 +719,8 @@
       }
 
       const rect = this.viewport.getBoundingClientRect();
-      const vx = (-this.panX / this.scale + minX - 20) * s;
-      const vy = (-this.panY / this.scale + minY - 20) * s;
+      const vx = (-this.panX / this.scale - minX + 20) * s;
+      const vy = (-this.panY / this.scale - minY + 20) * s;
       const vw = (rect.width / this.scale) * s;
       const vh = (rect.height / this.scale) * s;
 
@@ -662,14 +755,19 @@
   }
 
   function meterHtml(label, text, pct) {
+    // Tiny values make a 5px bar invisible; render label-only instead.
+    const tiny = pct != null && pct < 2;
     return (
       '<div class="map-meter">' +
       '<div class="map-meter-label"><span>' + label + '</span><span>' + text + "%</span></div>" +
-      '<div class="map-meter-bar"><div class="map-meter-fill ' +
-      meterClass(pct) +
-      '" style="width:' +
-      Math.min(100, Math.max(0, pct)) +
-      '%"></div></div></div>'
+      (tiny
+        ? ""
+        : '<div class="map-meter-bar"><div class="map-meter-fill ' +
+          meterClass(pct) +
+          '" style="width:' +
+          Math.min(100, Math.max(0, pct)) +
+          '%"></div></div>') +
+      "</div>"
     );
   }
 
