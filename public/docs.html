@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>API docs · Yozgat</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a href="/index.html" class="sidebar-brand">
+          <img src="/yozgat-logo-square.png" alt="" onerror="this.style.display='none'">
+          <span>YOZGAT</span>
+        </a>
+        <nav>
+          <a href="/index.html">Map</a>
+          <a href="/project.html">Projects</a>
+          <a href="/create-project.html">New project</a>
+          <a href="/docs.html" class="active">API docs</a>
+          <a href="/index.html">Settings</a>
+        </nav>
+        <div class="sidebar-footer">
+          <span id="sidebar-user">…</span>
+          <button type="button" class="secondary inline" id="logout">Sign out</button>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="app-topbar">
+          <span class="app-topbar-title">API docs</span>
+        </header>
+
+        <div class="docs-frame">
+          <iframe src="/docs" title="API docs"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+    <script>
+      (async function () {
+        const user = await requireAuth();
+        if (!user) return;
+        mountShell(user);
+      })();
+    </script>
+  </body>
+</html>
