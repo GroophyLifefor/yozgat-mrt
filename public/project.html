@@ -3,898 +3,112 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Project · Yozgat</title>
+    <title>Projects · Yozgat</title>
     <link rel="stylesheet" href="/style.css">
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <img src="/yozgat-logo-square.png" alt="Yozgat" class="brand-logo" onerror="this.style.display='none'">
-        <span>Yozgat</span>
-      </div>
-      <nav>
-        <a href="/index.html">← Projects</a>
-        <a href="#" id="nav-map">Map</a>
-        <a href="/docs" target="_blank" rel="noopener">API docs</a>
-      </nav>
-      <div class="topbar-right">
-        <span class="user-chip" id="user-chip">…</span>
-        <button class="secondary" id="logout" type="button">Sign out</button>
-      </div>
-    </header>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a href="/index.html" class="sidebar-brand">
+          <img src="/yozgat-logo-square.png" alt="" onerror="this.style.display='none'">
+          <span>YOZGAT</span>
+        </a>
+        <nav>
+          <a href="/index.html">Map</a>
+          <a href="/project.html" class="active">Projects</a>
+          <a href="/create-project.html">New project</a>
+          <a href="/docs" target="_blank" rel="noopener">API docs</a>
+          <a href="/index.html">Settings</a>
+        </nav>
+        <div class="sidebar-footer">
+          <span id="sidebar-user">…</span>
+          <button type="button" class="secondary inline" id="logout">Sign out</button>
+        </div>
+      </aside>
 
-    <main id="main">
-      <p class="muted">Loading…</p>
-    </main>
+      <div class="workspace">
+        <header class="app-topbar">
+          <span class="app-topbar-title">Projects</span>
+          <span class="spacer"></span>
+          <a href="/create-project.html"><button type="button" class="primary inline">New project</button></a>
+        </header>
+
+        <div class="workspace-content">
+          <main>
+            <div id="error" class="error"></div>
+            <div id="server-meta" class="hint" style="margin-bottom:1rem"></div>
+
+            <div class="panel" id="projects-panel">
+              <p class="muted">Loading…</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
 
     <script src="/app.js"></script>
     <script>
-      const projectId = Number(queryParam("id"));
-      let project = null;
-      let environments = [];
-      let publicIp = null;
-      let pollTimer = null;
-      let activeDeployment = null;
-      let resolvedCommit = null;
-      let deployments = [];
-      let domains = [];
-      let domainsEnvId = null;
-      let envVars = [];
-      let envVarsEnvId = null;
-
       (async function () {
-        if (!projectId) {
-          location.href = "/index.html";
-          return;
-        }
-
         const user = await requireAuth();
         if (!user) return;
-        mountTopbar(user);
+        mountShell(user);
 
-        const info = await apiJson("/server/info");
-        if (info.res.ok && info.data) publicIp = info.data.publicIp;
+        try {
+          const info = await apiJson("/server/info");
+          if (info.res.ok && info.data) {
+            const ip = info.data.publicIp || "—";
+            document.getElementById("server-meta").textContent =
+              "Server v" + (info.data.version || "?") + " · public IP " + ip;
+          }
+        } catch { /* optional */ }
 
-        await loadAll();
+        await loadProjects();
       })();
 
-      async function loadAll() {
-        const [{ res: pRes, data: pData }, { res: eRes, data: eData }, { res: dRes, data: dData }] = await Promise.all([
-          apiJson("/projects/" + projectId),
-          apiJson("/projects/" + projectId + "/environments"),
-          apiJson("/projects/" + projectId + "/deployments"),
-        ]);
-
-        if (!pRes.ok) {
-          renderError((pData && pData.error) || "Project not found");
-          return;
-        }
-
-        project = pData.project;
-        environments = (eData && eData.environments) || [];
-        deployments = (dRes.ok && dData && dData.deployments) ? dData.deployments : [];
-        render();
-        updateMapLink();
-        applyHashTab();
-      }
-
-      function updateMapLink() {
-        const link = document.getElementById("nav-map");
-        if (link) link.href = "/map.html?project=" + projectId;
-      }
-
-      async function refreshDeployments() {
-        const { res, data } = await apiJson("/projects/" + projectId + "/deployments");
-        if (!res.ok || !data || !Array.isArray(data.deployments)) return;
-        deployments = data.deployments;
-        const panel = document.getElementById("panel-deployments");
-        if (panel) renderDeployments();
-      }
-
-      function renderError(msg) {
-        document.getElementById("main").innerHTML =
-          '<div class="page-head"><h2>Project</h2></div>' +
-          '<div id="error" class="error visible">' + escapeHtml(msg) + "</div>" +
-          '<a href="/index.html">Back to projects</a>';
-      }
-
-      function render() {
-        const main = document.getElementById("main");
-        main.innerHTML =
-          '<div class="page-head">' +
-          "<h2>" + escapeHtml(project.name) + "</h2>" +
-          '<span class="status-pill ' + statusClass(project.status) + '">' + escapeHtml(project.status) + "</span>" +
-          "</div>" +
-          '<div id="error" class="error"></div>' +
-          '<div id="live-banner"></div>' +
-          '<div class="tabs" role="tablist">' +
-          '<button type="button" class="tab active" data-tab="overview">Overview</button>' +
-          '<button type="button" class="tab" data-tab="environments">Environments</button>' +
-          '<button type="button" class="tab" data-tab="deployments">Deployments</button>' +
-          '<button type="button" class="tab" data-tab="deploy">Deploy</button>' +
-          "</div>" +
-          '<div id="panel-overview" class="tab-panel active"></div>' +
-          '<div id="panel-environments" class="tab-panel"></div>' +
-          '<div id="panel-deployments" class="tab-panel"></div>' +
-          '<div id="panel-deploy" class="tab-panel"></div>';
-
-        main.querySelectorAll(".tab").forEach((btn) => {
-          btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-        });
-
-        renderOverview();
-        renderEnvironments();
-        renderDeployments();
-        renderDeploy();
-        updateLiveBanner();
-      }
-
-      function defaultEnvId() {
-        if (!environments.length) return null;
-        const prod = environments.find((e) => e.slug === "prod");
-        return prod ? prod.id : environments[0].id;
-      }
-
-      async function loadDomainsForEnv(envId) {
-        domainsEnvId = envId;
-        domains = [];
-        const listEl = document.getElementById("domains-list");
-        if (!listEl) return;
-        if (!envId) {
-          listEl.innerHTML = '<p class="muted">Create an environment first.</p>';
-          return;
-        }
-        listEl.innerHTML = '<p class="muted">Loading domains…</p>';
-        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/domains");
-        if (domainsEnvId !== envId) return;
+      async function loadProjects() {
+        const panel = document.getElementById("projects-panel");
+        const { res, data } = await apiJson("/projects");
         if (!res.ok) {
-          listEl.innerHTML = '<p class="error">' + escapeHtml((data && data.error) || "Could not load domains") + "</p>";
-          return;
-        }
-        domains = (data && data.domains) || [];
-        renderDomainsList();
-      }
-
-      function renderDomainsList() {
-        const listEl = document.getElementById("domains-list");
-        if (!listEl) return;
-
-        let table = "";
-        if (domains.length) {
-          table =
-            '<div class="table-wrap"><table><thead><tr>' +
-            "<th>Domain</th><th>Port</th><th>Created</th><th></th>" +
-            "</tr></thead><tbody>";
-          for (const d of domains) {
-            table +=
-              "<tr>" +
-              '<td class="mono">' + escapeHtml(d.domainName) + "</td>" +
-              "<td>" + d.port + "</td>" +
-              "<td>" + escapeHtml(formatDate(d.createdAt)) + "</td>" +
-              '<td><button type="button" class="danger inline delete-domain" data-id="' + d.id + '">Remove</button></td>' +
-              "</tr>";
-          }
-          table += "</tbody></table></div>";
-        } else {
-          table = '<p class="muted">No custom domains yet.</p>';
-        }
-        listEl.innerHTML = table;
-
-        listEl.querySelectorAll(".delete-domain").forEach((btn) => {
-          btn.addEventListener("click", () => deleteDomain(Number(btn.dataset.id)));
-        });
-      }
-
-      function switchTab(name, updateHash) {
-        if (updateHash !== false) {
-          history.replaceState(null, "", "#" + name);
-        }
-        document.querySelectorAll(".tab").forEach((t) => {
-          t.classList.toggle("active", t.dataset.tab === name);
-        });
-        document.querySelectorAll(".tab-panel").forEach((p) => {
-          p.classList.toggle("active", p.id === "panel-" + name);
-        });
-      }
-
-      function applyHashTab() {
-        const tab = (location.hash || "").replace("#", "");
-        if (tab === "logs") {
-          switchTab("deploy", false);
-          return;
-        }
-        if (["overview", "environments", "deployments", "deploy"].includes(tab)) {
-          switchTab(tab, false);
-        }
-      }
-
-      window.addEventListener("hashchange", applyHashTab);
-
-      function renderOverview() {
-        const panel = document.getElementById("panel-overview");
-        const envSlug = defaultEnvSlug();
-        const webhookUrl =
-          location.origin + "/projects/" + projectId + "/environments/" + encodeURIComponent(envSlug) + "/deploy";
-        const workflow = githubActionsYaml(envSlug);
-
-        panel.innerHTML =
-          '<div class="panel">' +
-          '<dl class="meta-grid">' +
-          "<dt>Type</dt><dd>" + escapeHtml(projectTypeLabel(project.projectType)) + "</dd>" +
-          "<dt>Repository</dt><dd class=\"mono\">" + escapeHtml(project.repoUrl) + "</dd>" +
-          "<dt>Private repo</dt><dd>" + (project.hasPrivateCredentials ? "yes" : "no") + "</dd>" +
-          "<dt>Created</dt><dd>" + escapeHtml(formatDate(project.createdAt)) + "</dd>" +
-          "</dl>" +
-          '<div class="actions">' +
-          '<button type="button" class="danger inline" id="delete-project">Delete project</button>' +
-          "</div></div>" +
-          '<div class="panel">' +
-          "<h3>Continuous deployment</h3>" +
-          '<p class="hint">Sign the JSON body with HMAC SHA-256 using the webhook secret. GitHub Actions and other CI can POST to this URL.</p>' +
-          '<div class="field"><label>Webhook URL</label>' +
-          '<div class="secret-row"><code class="secret-value" id="webhook-url">' + escapeHtml(webhookUrl) + "</code>" +
-          '<button type="button" class="secondary inline" id="copy-webhook-url">Copy URL</button></div></div>' +
-          '<div class="field"><label>Webhook secret</label>' +
-          '<div class="secret-row"><code class="secret-value" id="webhook-secret">' + escapeHtml(project.webhookSecret) + "</code>" +
-          '<button type="button" class="secondary inline" id="copy-webhook-secret">Copy secret</button></div></div>' +
-          '<div class="field"><label>Environment slug</label>' +
-          '<p class="hint mono" id="webhook-env-slug">' + escapeHtml(envSlug) + " (change slug in the URL for other environments)</p></div>" +
-          "<h3 style=\"margin-top:1.25rem\">GitHub Actions</h3>" +
-          '<p class="hint">Add <span class="mono">.github/workflows/yozgat-deploy.yml</span> to your repository.</p>' +
-          '<pre class="code-block" id="workflow-yaml">' + escapeHtml(workflow) + "</pre>" +
-          '<div class="actions"><button type="button" class="secondary inline" id="copy-workflow">Copy workflow</button></div>' +
-          '<dl class="meta-grid" style="margin-top:1rem">' +
-          "<dt>Secret</dt><dd><span class=\"mono\">YOZGAT_URL</span> — " + escapeHtml(location.origin) + "</dd>" +
-          "<dt>Secret</dt><dd><span class=\"mono\">YOZGAT_WEBHOOK_SECRET</span> — copy from above</dd>" +
-          "<dt>Variable</dt><dd><span class=\"mono\">YOZGAT_PROJECT_ID</span> — " + projectId + "</dd>" +
-          "<dt>Variable</dt><dd><span class=\"mono\">YOZGAT_ENV_SLUG</span> — " + escapeHtml(envSlug) + "</dd>" +
-          "</dl></div>";
-
-        document.getElementById("delete-project").addEventListener("click", deleteProject);
-        document.getElementById("copy-webhook-url").addEventListener("click", (e) => {
-          copyText(document.getElementById("webhook-url").textContent, e.target);
-        });
-        document.getElementById("copy-webhook-secret").addEventListener("click", (e) => {
-          copyText(project.webhookSecret, e.target);
-        });
-        document.getElementById("copy-workflow").addEventListener("click", (e) => {
-          copyText(workflow, e.target);
-        });
-      }
-
-      function defaultEnvSlug() {
-        if (!environments.length) return "prod";
-        const prod = environments.find((e) => e.slug === "prod");
-        return prod ? prod.slug : environments[0].slug;
-      }
-
-      function githubActionsYaml(envSlug) {
-        return (
-          "name: Deploy to Yozgat\n\n" +
-          "on:\n" +
-          "  push:\n" +
-          "    branches: [main]\n\n" +
-          "jobs:\n" +
-          "  deploy:\n" +
-          "    runs-on: ubuntu-latest\n" +
-          "    steps:\n" +
-          "      - uses: actions/checkout@v4\n\n" +
-          "      - name: Deploy\n" +
-          "        env:\n" +
-          "          YOZGAT_URL: ${{ secrets.YOZGAT_URL }}\n" +
-          "          WEBHOOK_SECRET: ${{ secrets.YOZGAT_WEBHOOK_SECRET }}\n" +
-          "          PROJECT_ID: ${{ vars.YOZGAT_PROJECT_ID }}\n" +
-          "          ENV_SLUG: ${{ vars.YOZGAT_ENV_SLUG }}\n" +
-          "        run: |\n" +
-          "          ENV_SLUG=\"${ENV_SLUG:-" + envSlug + "}\"\n" +
-          "          PAYLOAD='{\"commitHash\":\"${{ github.sha }}\"}'\n" +
-          "          SIGNATURE=$(printf '%s' \"$PAYLOAD\" | openssl dgst -sha256 -hmac \"$WEBHOOK_SECRET\" | awk '{print $2}')\n" +
-          "          curl -sS -f -X POST \"${YOZGAT_URL}/projects/${PROJECT_ID}/environments/${ENV_SLUG}/deploy\" \\\n" +
-          "            -H \"Content-Type: application/json\" \\\n" +
-          "            -H \"X-Hub-Signature-256: sha256=${SIGNATURE}\" \\\n" +
-          "            -d \"$PAYLOAD\""
-        );
-      }
-
-      function renderEnvironments() {
-        const panel = document.getElementById("panel-environments");
-
-        let table = "";
-        if (environments.length) {
-          table =
-            '<div class="table-wrap"><table><thead><tr>' +
-            "<th>Name</th><th>Slug</th><th>Host port</th><th>Created</th><th></th>" +
-            "</tr></thead><tbody>";
-          for (const env of environments) {
-            table +=
-              "<tr>" +
-              "<td>" + escapeHtml(env.name) + "</td>" +
-              '<td class="mono">' + escapeHtml(env.slug) + "</td>" +
-              "<td>" + (env.hostPort != null ? env.hostPort : "—") + "</td>" +
-              "<td>" + escapeHtml(formatDate(env.createdAt)) + "</td>" +
-              '<td><button type="button" class="secondary inline edit-port" data-id="' + env.id + '" data-port="' + (env.hostPort || "") + '">Set port</button></td>' +
-              "</tr>";
-          }
-          table += "</tbody></table></div>";
-        } else {
-          table = '<p class="muted">No environments.</p>';
-        }
-
-        panel.innerHTML =
-          '<div class="panel">' +
-          "<h3>Environments</h3>" +
-          table +
-          "</div>" +
-          '<div class="panel">' +
-          "<h3>Custom domains</h3>" +
-          '<p class="hint">Point your domain A record to <span class="mono">' + escapeHtml(publicIp || "your server IP") + "</span>, then add it here. HTTPS is provisioned via Traefik.</p>" +
-          '<div class="field"><label for="domains-env">Environment</label><select id="domains-env">' +
-          environments.map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + " (" + escapeHtml(e.slug) + ")</option>").join("") +
-          "</select></div>" +
-          '<div id="domains-list"></div>' +
-          '<form id="domain-form" style="margin-top:1rem">' +
-          '<div class="field-row">' +
-          '<div class="field"><label for="domain-name">Domain</label><input type="text" id="domain-name" placeholder="app.example.com" required pattern="[a-zA-Z0-9.-]+"></div>' +
-          '<div class="field"><label for="domain-port">Service port</label><input type="number" id="domain-port" value="80" min="1" max="65535"></div>' +
-          "</div>" +
-          '<div class="actions">' +
-          '<button type="button" class="secondary inline" id="verify-domain">Verify DNS</button>' +
-          '<button type="submit" class="primary inline">Add domain</button>' +
-          "</div>" +
-          '<p id="domain-verify-result" class="hint"></p>' +
-          "</form></div>" +
-          '<div class="panel">' +
-          "<h3>Environment variables</h3>" +
-          '<p class="hint">Keys: <span class="mono">^[A-Z_][A-Z0-9_]*$</span>. Values are written to <span class="mono">.env</span> on deploy. Compose services must reference <span class="mono">env_file: .env</span>.</p>' +
-          '<div class="field"><label for="envvars-env">Environment</label><select id="envvars-env">' +
-          environments.map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + " (" + escapeHtml(e.slug) + ")</option>").join("") +
-          "</select></div>" +
-          '<div id="envvars-list"></div>' +
-          '<form id="envvar-form" style="margin-top:1rem">' +
-          '<div class="field-row">' +
-          '<div class="field"><label for="envvar-key">Key</label><input type="text" id="envvar-key" required pattern="[A-Z_][A-Z0-9_]*" placeholder="DATABASE_URL"></div>' +
-          '<div class="field"><label for="envvar-value">Value</label><input type="text" id="envvar-value" required></div>' +
-          "</div>" +
-          '<div class="actions"><button type="submit" class="primary inline">Save variable</button></div>' +
-          "</form></div>" +
-          '<div class="panel">' +
-          "<h3>Add environment</h3>" +
-          '<form id="env-form">' +
-          '<div class="field-row">' +
-          '<div class="field"><label for="env-name">Name</label><input type="text" id="env-name" required></div>' +
-          '<div class="field"><label for="env-slug">Slug</label><input type="text" id="env-slug" required pattern="[a-zA-Z0-9._-]+"></div>' +
-          "</div>" +
-          '<div class="actions"><button type="submit" class="primary inline">Create</button></div>' +
-          "</form></div>";
-
-        document.getElementById("env-name").addEventListener("input", () => {
-          const slug = document.getElementById("env-slug");
-          if (slug.dataset.touched) return;
-          slug.value = document.getElementById("env-name").value
-            .trim()
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-|-$/g, "");
-        });
-        document.getElementById("env-slug").addEventListener("input", () => {
-          document.getElementById("env-slug").dataset.touched = "1";
-        });
-
-        document.getElementById("env-form").addEventListener("submit", createEnvironment);
-        panel.querySelectorAll(".edit-port").forEach((btn) => {
-          btn.addEventListener("click", () => editHostPort(Number(btn.dataset.id), btn.dataset.port));
-        });
-
-        const domainsEnvSelect = document.getElementById("domains-env");
-        if (domainsEnvSelect) {
-          const defaultId = defaultEnvId();
-          if (defaultId) domainsEnvSelect.value = String(defaultId);
-          domainsEnvSelect.addEventListener("change", () => loadDomainsForEnv(Number(domainsEnvSelect.value)));
-          document.getElementById("domain-form").addEventListener("submit", addDomain);
-          document.getElementById("verify-domain").addEventListener("click", verifyDomain);
-          loadDomainsForEnv(Number(domainsEnvSelect.value));
-        }
-
-        const envVarsSelect = document.getElementById("envvars-env");
-        if (envVarsSelect) {
-          const defaultId = defaultEnvId();
-          if (defaultId) envVarsSelect.value = String(defaultId);
-          envVarsSelect.addEventListener("change", () => loadEnvVarsForEnv(Number(envVarsSelect.value)));
-          document.getElementById("envvar-form").addEventListener("submit", saveEnvVar);
-          loadEnvVarsForEnv(Number(envVarsSelect.value));
-        }
-      }
-
-      async function loadEnvVarsForEnv(envId) {
-        envVarsEnvId = envId;
-        envVars = [];
-        const listEl = document.getElementById("envvars-list");
-        if (!listEl) return;
-        if (!envId) {
-          listEl.innerHTML = '<p class="muted">Create an environment first.</p>';
-          return;
-        }
-        listEl.innerHTML = '<p class="muted">Loading variables…</p>';
-        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/env-vars");
-        if (envVarsEnvId !== envId) return;
-        if (!res.ok) {
-          listEl.innerHTML = '<p class="error">' + escapeHtml((data && data.error) || "Could not load variables") + "</p>";
-          return;
-        }
-        envVars = (data && data.envVars) || [];
-        renderEnvVarsList();
-      }
-
-      function renderEnvVarsList() {
-        const listEl = document.getElementById("envvars-list");
-        if (!listEl) return;
-
-        if (!envVars.length) {
-          listEl.innerHTML = '<p class="muted">No variables configured.</p>';
+          showError((data && data.error) || "Could not load projects");
+          panel.innerHTML = "";
           return;
         }
 
-        let table =
+        const projects = (data && data.projects) || [];
+        if (projects.length === 0) {
+          panel.innerHTML =
+            '<div class="empty">' +
+            "<h3>No projects yet</h3>" +
+            "<p>Connect a GitHub repository to deploy your first site.</p>" +
+            '<a href="/create-project.html"><button type="button" class="primary inline">New project</button></a>' +
+            "</div>";
+          return;
+        }
+
+        let html =
           '<div class="table-wrap"><table><thead><tr>' +
-          "<th>Key</th><th>Value</th><th></th>" +
+          "<th>Name</th><th>Status</th><th>Type</th><th>Repository</th><th>Created</th>" +
           "</tr></thead><tbody>";
-        for (const v of envVars) {
-          table +=
-            "<tr>" +
-            '<td class="mono">' + escapeHtml(v.key) + "</td>" +
-            '<td class="mono">' + escapeHtml(maskEnvValue(v.value)) + "</td>" +
-            '<td><button type="button" class="danger inline delete-envvar" data-id="' + v.id + '">Remove</button></td>' +
+
+        for (const p of projects) {
+          html +=
+            '<tr class="clickable" data-id="' + p.id + '">' +
+            "<td><strong>" + escapeHtml(p.name) + "</strong></td>" +
+            '<td><span class="status-pill ' + statusClass(p.status) + '">' + escapeHtml(p.status) + "</span></td>" +
+            "<td>" + escapeHtml(projectTypeLabel(p.projectType)) + "</td>" +
+            '<td class="mono">' + escapeHtml(p.repoUrl) + "</td>" +
+            "<td>" + escapeHtml(formatDate(p.createdAt)) + "</td>" +
             "</tr>";
         }
-        table += "</tbody></table></div>";
-        listEl.innerHTML = table;
 
-        listEl.querySelectorAll(".delete-envvar").forEach((btn) => {
-          btn.addEventListener("click", () => deleteEnvVar(Number(btn.dataset.id)));
+        html += "</tbody></table></div>";
+        panel.innerHTML = html;
+
+        panel.querySelectorAll("tr.clickable").forEach((row) => {
+          row.addEventListener("click", () => {
+            location.href = "/project-detail.html?id=" + row.dataset.id;
+          });
         });
-      }
-
-      function maskEnvValue(value) {
-        if (!value) return "";
-        if (value.length <= 4) return "••••";
-        return value.slice(0, 2) + "••••" + value.slice(-2);
-      }
-
-      async function saveEnvVar(ev) {
-        ev.preventDefault();
-        hideError();
-        const envId = Number(document.getElementById("envvars-env").value);
-        const key = document.getElementById("envvar-key").value.trim();
-        const value = document.getElementById("envvar-value").value;
-        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/env-vars", {
-          method: "POST",
-          body: JSON.stringify({ key: key, value: value }),
-        });
-        if (res.ok) {
-          document.getElementById("envvar-key").value = "";
-          document.getElementById("envvar-value").value = "";
-          await loadEnvVarsForEnv(envId);
-        } else {
-          showError((data && data.error) || "Could not save variable");
-        }
-      }
-
-      async function deleteEnvVar(varId) {
-        if (!confirm("Remove this variable?")) return;
-        hideError();
-        const envId = Number(document.getElementById("envvars-env").value);
-        const { res, data } = await apiJson(
-          "/projects/" + projectId + "/environments/" + envId + "/env-vars/" + varId,
-          { method: "DELETE" }
-        );
-        if (res.ok) {
-          await loadEnvVarsForEnv(envId);
-        } else {
-          showError((data && data.error) || "Could not remove variable");
-        }
-      }
-
-      async function verifyDomain() {
-        hideError();
-        const envId = Number(document.getElementById("domains-env").value);
-        const name = document.getElementById("domain-name").value.trim().toLowerCase();
-        const resultEl = document.getElementById("domain-verify-result");
-        if (!name) {
-          resultEl.textContent = "Enter a domain name first.";
-          return;
-        }
-        resultEl.textContent = "Checking DNS…";
-        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/domains/verify", {
-          method: "POST",
-          body: JSON.stringify({ domainName: name }),
-        });
-        if (res.ok && data) {
-          resultEl.textContent = "OK — A record points to " + data.expectedIp + " (found: " + (data.foundIps || []).join(", ") + ")";
-        } else {
-          resultEl.textContent = (data && data.error) || "Verification failed";
-        }
-      }
-
-      async function addDomain(ev) {
-        ev.preventDefault();
-        hideError();
-        const envId = Number(document.getElementById("domains-env").value);
-        const name = document.getElementById("domain-name").value.trim().toLowerCase();
-        const port = Number(document.getElementById("domain-port").value) || 80;
-        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId + "/domains", {
-          method: "POST",
-          body: JSON.stringify({ domainName: name, port: port }),
-        });
-        if (res.ok) {
-          document.getElementById("domain-name").value = "";
-          document.getElementById("domain-verify-result").textContent = "";
-          await loadDomainsForEnv(envId);
-        } else {
-          showError((data && data.error) || "Could not add domain");
-        }
-      }
-
-      async function deleteDomain(domainId) {
-        if (!confirm("Remove this domain?")) return;
-        hideError();
-        const envId = Number(document.getElementById("domains-env").value);
-        const { res, data } = await apiJson(
-          "/projects/" + projectId + "/environments/" + envId + "/domains/" + domainId,
-          { method: "DELETE" }
-        );
-        if (res.ok) {
-          await loadDomainsForEnv(envId);
-        } else {
-          showError((data && data.error) || "Could not remove domain");
-        }
-      }
-
-      function renderDeployments() {
-        const panel = document.getElementById("panel-deployments");
-        if (!panel) return;
-
-        let table = "";
-        if (deployments.length) {
-          table =
-            '<div class="table-wrap"><table><thead><tr>' +
-            "<th>#</th><th>Environment</th><th>Commit</th><th>Status</th><th>Port</th><th>Created</th><th></th>" +
-            "</tr></thead><tbody>";
-          for (const d of deployments) {
-            table +=
-              "<tr>" +
-              "<td>" + d.id + "</td>" +
-              "<td>" + escapeHtml(d.environmentName) + ' <span class="mono muted">' + escapeHtml(d.environmentSlug) + "</span></td>" +
-              '<td class="mono">' + escapeHtml((d.commitHash || "").slice(0, 7)) + "</td>" +
-              '<td><span class="status-pill ' + statusClass(d.status) + '">' + escapeHtml(d.status) + "</span></td>" +
-              "<td>" + (d.assignedPort != null ? d.assignedPort : "—") + "</td>" +
-              "<td>" + escapeHtml(formatDate(d.createdAt)) + "</td>" +
-              '<td><button type="button" class="secondary inline view-logs" data-id="' + d.id + '">Logs</button></td>' +
-              "</tr>";
-          }
-          table += "</tbody></table></div>";
-        } else {
-          table = '<p class="muted">No deployments yet.</p>';
-        }
-
-        panel.innerHTML =
-          '<div class="panel">' +
-          "<h3>Deployment history</h3>" +
-          table +
-          '<div class="actions" style="margin-top:1rem">' +
-          '<button type="button" class="secondary inline" id="refresh-deployments">Refresh</button>' +
-          "</div></div>";
-
-        panel.querySelectorAll(".view-logs").forEach((btn) => {
-          btn.addEventListener("click", () => viewDeploymentLogs(Number(btn.dataset.id)));
-        });
-        document.getElementById("refresh-deployments").addEventListener("click", refreshDeployments);
-      }
-
-      function viewDeploymentLogs(deploymentId) {
-        const d = deployments.find((x) => x.id === deploymentId);
-        if (!d) return;
-
-        activeDeployment = {
-          id: d.id,
-          environmentId: d.environmentId,
-          commitHash: d.commitHash,
-          status: d.status,
-          assignedPort: d.assignedPort,
-        };
-
-        switchTab("deploy");
-        const logsPanel = document.getElementById("logs-panel");
-        if (logsPanel) logsPanel.style.display = "block";
-        const statusEl = document.getElementById("deploy-status");
-        if (statusEl) statusEl.textContent = "Deployment #" + d.id + " · " + d.status;
-        updateLiveBanner();
-        startPolling();
-      }
-
-      function canDeploy() {
-        return (
-          project.projectType === "static" ||
-          project.projectType === "dockerfile" ||
-          project.projectType === "dockercompose"
-        );
-      }
-
-      function renderDeploy() {
-        const panel = document.getElementById("panel-deploy");
-        const envOptions = environments
-          .map((e) => '<option value="' + e.id + '">' + escapeHtml(e.name) + " (" + escapeHtml(e.slug) + ")</option>")
-          .join("");
-
-        resolvedCommit = null;
-
-        panel.innerHTML =
-          '<div class="panel">' +
-          "<h3>Deploy</h3>" +
-          (canDeploy()
-            ? ""
-            : '<p class="hint error">Project type "' + escapeHtml(project.projectType) + '" is not supported yet. Static, Dockerfile, and Compose projects can be deployed.</p>') +
-          '<div class="field"><label for="deploy-env">Environment</label><select id="deploy-env">' + envOptions + "</select></div>" +
-          '<div class="field-row">' +
-          '<div class="field"><label for="deploy-branch">Branch</label><select id="deploy-branch" disabled><option>Loading branches…</option></select></div>' +
-          '<div class="field"><label for="deploy-commit">Commit hash</label><input type="text" id="deploy-commit" readonly placeholder="Select a branch"></div>' +
-          "</div>" +
-          '<div class="actions">' +
-          '<button type="button" class="primary inline" id="start-deploy" disabled>Deploy</button>' +
-          "</div>" +
-          '<p id="deploy-status" class="hint"></p>' +
-          "</div>" +
-          '<div class="panel" id="logs-panel" style="display:none">' +
-          "<h3>Deployment logs</h3>" +
-          '<p id="deployment-meta" class="hint"></p>' +
-          "<label>Deploy log</label>" +
-          '<textarea id="deploy-log" readonly></textarea>' +
-          "<label style=\"margin-top:1rem;display:block\">Container log</label>" +
-          '<textarea id="container-log" readonly></textarea>' +
-          "</div>";
-
-        document.getElementById("start-deploy").addEventListener("click", startDeploy);
-        loadDeployBranches();
-      }
-
-      async function loadDeployBranches() {
-        const select = document.getElementById("deploy-branch");
-        const status = document.getElementById("deploy-status");
-        if (!select) return;
-
-        const { res, data } = await apiJson("/projects/" + projectId + "/branches");
-        if (!select.isConnected) return;
-
-        if (!res.ok || !data || !Array.isArray(data.branches) || data.branches.length === 0) {
-          select.innerHTML = '<option value="">Could not load branches</option>';
-          select.disabled = true;
-          showError((data && data.error) || "Could not load branches");
-          return;
-        }
-
-        const branchNames = data.branches.map((b) => (typeof b === "string" ? b : b.name)).filter(Boolean);
-        if (branchNames.length === 0) {
-          select.innerHTML = '<option value="">No branches found</option>';
-          select.disabled = true;
-          showError("No branches found");
-          return;
-        }
-
-        select.innerHTML = branchNames
-          .map((b) => '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + "</option>")
-          .join("");
-        select.disabled = false;
-
-        select.addEventListener("change", () => resolveCommitForBranch());
-        if (status) status.textContent = branchNames.length + " branch(es) loaded";
-        await resolveCommitForBranch();
-      }
-
-      async function resolveCommitForBranch() {
-        hideError();
-        resolvedCommit = null;
-
-        const select = document.getElementById("deploy-branch");
-        const commitEl = document.getElementById("deploy-commit");
-        const deployBtn = document.getElementById("start-deploy");
-        const status = document.getElementById("deploy-status");
-        if (!select || !commitEl || !deployBtn) return;
-
-        const branch = select.value;
-        if (!branch) {
-          commitEl.value = "";
-          commitEl.placeholder = "Select a branch";
-          deployBtn.disabled = true;
-          return;
-        }
-
-        commitEl.value = "";
-        commitEl.placeholder = "Resolving latest commit…";
-        deployBtn.disabled = true;
-        select.disabled = true;
-
-        const { res, data } = await apiJson(
-          "/projects/" + projectId + "/resolve-commit?branch=" + encodeURIComponent(branch)
-        );
-
-        if (!select.isConnected) return;
-        select.disabled = false;
-
-        if (res.ok && data && data.commitHash) {
-          resolvedCommit = data.commitHash;
-          commitEl.value = resolvedCommit;
-          commitEl.placeholder = "";
-          deployBtn.disabled = !canDeploy();
-          if (status) {
-            status.textContent = data.branch + " @ " + data.commitHash.slice(0, 7);
-          }
-          return;
-        }
-
-        commitEl.value = "";
-        commitEl.placeholder = "Could not resolve commit";
-        deployBtn.disabled = true;
-        showError((data && data.error) || "Could not resolve branch");
-      }
-
-      async function createEnvironment(e) {
-        e.preventDefault();
-        hideError();
-        const name = document.getElementById("env-name").value.trim();
-        const slug = document.getElementById("env-slug").value.trim();
-        const { res, data } = await apiJson("/projects/" + projectId + "/environments", {
-          method: "POST",
-          body: JSON.stringify({ name, slug }),
-        });
-        if (res.ok && data && data.environment) {
-          environments.push(data.environment);
-          renderEnvironments();
-          renderDeploy();
-          document.getElementById("env-name").value = "";
-          document.getElementById("env-slug").value = "";
-          delete document.getElementById("env-slug").dataset.touched;
-          return;
-        }
-        showError((data && data.error) || "Could not create environment");
-      }
-
-      async function editHostPort(envId, current) {
-        const val = prompt("Host port (8000–8999, leave empty to clear):", current || "");
-        if (val === null) return;
-        const body = {};
-        if (val.trim()) body.hostPort = Number(val.trim());
-        else return showError("Enter a port number or cancel");
-
-        const { res, data } = await apiJson("/projects/" + projectId + "/environments/" + envId, {
-          method: "PATCH",
-          body: JSON.stringify(body),
-        });
-        if (res.ok && data && data.environment) {
-          environments = environments.map((e) => (e.id === envId ? data.environment : e));
-          renderEnvironments();
-          return;
-        }
-        showError((data && data.error) || "Could not update port");
-      }
-
-      async function startDeploy() {
-        hideError();
-        if (!resolvedCommit) {
-          showError("Wait for the latest commit to load, or pick another branch");
-          return;
-        }
-
-        const envId = Number(document.getElementById("deploy-env").value);
-        const btn = document.getElementById("start-deploy");
-        btn.disabled = true;
-        btn.textContent = "Starting…";
-
-        const { res, data } = await apiJson(
-          "/projects/" + projectId + "/deployments",
-          { method: "POST", body: JSON.stringify({ environmentId: envId, commitHash: resolvedCommit }) }
-        );
-
-        btn.disabled = false;
-        btn.textContent = "Deploy";
-
-        if (!res.ok || !data || !data.deployment) {
-          showError((data && data.error) || "Deploy failed to start");
-          return;
-        }
-
-        activeDeployment = data.deployment;
-        deployments.unshift({
-          id: data.deployment.id,
-          environmentId: data.deployment.environmentId,
-          environmentSlug: environments.find((e) => e.id === envId)?.slug || "",
-          environmentName: environments.find((e) => e.id === envId)?.name || "",
-          commitHash: data.deployment.commitHash,
-          status: data.deployment.status,
-          assignedPort: data.deployment.assignedPort,
-          createdAt: data.deployment.createdAt,
-        });
-        renderDeployments();
-        switchTab("deploy");
-        document.getElementById("logs-panel").style.display = "block";
-        document.getElementById("deploy-status").textContent =
-          "Deployment #" + activeDeployment.id + " · " + activeDeployment.status;
-        updateLiveBanner();
-        startPolling();
-      }
-
-      function startPolling() {
-        if (pollTimer) clearInterval(pollTimer);
-        pollLogs();
-        pollTimer = setInterval(pollLogs, 2000);
-      }
-
-      async function pollLogs() {
-        if (!activeDeployment) return;
-
-        const { res, data } = await apiJson(
-          "/projects/" + projectId + "/deployments/" + activeDeployment.id + "/logs?tail=300"
-        );
-
-        if (!res.ok || !data || !data.logs) return;
-
-        const logs = data.logs;
-        activeDeployment.status = logs.status;
-        document.getElementById("deploy-log").value = logs.deployLog || "";
-        document.getElementById("container-log").value = logs.containerLog || "";
-        document.getElementById("deployment-meta").textContent =
-          "Status: " + logs.status + " · commit " + (activeDeployment.commitHash || "").slice(0, 7);
-
-        document.getElementById("deploy-status").textContent =
-          "Deployment #" + activeDeployment.id + " · " + logs.status;
-
-        if (logs.status === "running" || logs.status === "failed") {
-          clearInterval(pollTimer);
-          pollTimer = null;
-          refreshDeployments();
-          if (logs.status === "running") {
-            const fresh = await apiJson("/projects/" + projectId);
-            if (fresh.res.ok && fresh.data && fresh.data.project) {
-              project = fresh.data.project;
-              const pill = document.querySelector(".page-head .status-pill");
-              if (pill) {
-                pill.textContent = project.status;
-                pill.className = "status-pill " + statusClass(project.status);
-              }
-            }
-          }
-        }
-
-        updateLiveBanner();
-      }
-
-      function liveUrl() {
-        const port = activeDeployment && activeDeployment.assignedPort;
-        if (!publicIp || !port || activeDeployment.status !== "running") return null;
-        return "http://" + publicIp + ":" + port;
-      }
-
-      function updateLiveBanner() {
-        const el = document.getElementById("live-banner");
-        if (!el) return;
-        const url = liveUrl();
-        if (!url) {
-          el.innerHTML = "";
-          return;
-        }
-        el.innerHTML =
-          '<div class="live-url">' +
-          "<span>Live at</span>" +
-          '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(url) + "</a>" +
-          "</div>";
-      }
-
-      async function deleteProject() {
-        if (!confirm("Delete “" + project.name + "” and all its data? This cannot be undone.")) return;
-        const { res, data } = await apiJson("/projects/" + projectId, { method: "DELETE" });
-        if (res.ok) {
-          location.href = "/index.html";
-          return;
-        }
-        showError((data && data.error) || "Could not delete project");
       }
     </script>
   </body>

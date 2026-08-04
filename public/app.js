@@ -148,9 +148,10 @@ function queryParam(name) {
   return new URLSearchParams(location.search).get(name);
 }
 
-function mountTopbar(user) {
-  const chip = document.getElementById("user-chip");
-  if (chip && user) chip.textContent = user.email;
+// Fills the app-shell sidebar footer (user email + sign out).
+function mountShell(user) {
+  const userEl = document.getElementById("sidebar-user");
+  if (userEl && user) userEl.textContent = user.email;
   const logoutBtn = document.getElementById("logout");
   if (logoutBtn) logoutBtn.addEventListener("click", logout);
 }

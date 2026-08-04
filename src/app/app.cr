@@ -6,6 +6,6 @@ get "/" do |env|
   if Yozgat::DB.count_users == 0
     env.redirect "/setup.html"
   else
-    env.redirect "/map.html"
+    env.redirect "/index.html"
   end
 end

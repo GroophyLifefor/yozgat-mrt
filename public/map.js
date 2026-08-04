@@ -25,8 +25,7 @@
   async function init() {
     const user = await requireAuth();
     if (!user) return;
-    document.getElementById("sidebar-user").textContent = user.email;
-    document.getElementById("logout").addEventListener("click", logout);
+    mountShell(user);
 
     document.getElementById("btn-refresh").addEventListener("click", loadTopology);
     document.getElementById("btn-fit").addEventListener("click", () => canvas.fit());
